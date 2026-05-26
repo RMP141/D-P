@@ -26,6 +26,7 @@ namespace ConvoyManager.Core
             builder.RegisterInstance(_gameConfig);
             builder.RegisterInstance(_hexTileConfig);
             builder.Register<EventBus>(Lifetime.Singleton);
+            builder.Register<ISaveSystem, SaveSystem>(Lifetime.Singleton);
             builder.Register<IRandomGenerator, UnityRandomGenerator>(Lifetime.Singleton);
 
             // World
@@ -59,7 +60,7 @@ namespace ConvoyManager.Core
             if (uiDocument != null)
                 builder.RegisterInstance(uiDocument);
             else
-                Debug.LogError("UIDocument не найден на сцене!");
+                Debug.LogError("UIDocument пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅ пїЅпїЅпїЅпїЅпїЅ!");
 
             builder.Register<IUIManager, UIManager>(Lifetime.Singleton).As<IStartable>();
             builder.Register<MarketScreen>(Lifetime.Singleton);

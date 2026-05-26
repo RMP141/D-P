@@ -69,9 +69,4 @@ namespace ConvoyManager.UI
         }
     }
 
-    public struct ShowScreenEvent
-    {
-        public string ScreenName;
-        public ShowScreenEvent(string name) => ScreenName = name;
-    }
 }

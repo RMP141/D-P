@@ -34,7 +34,7 @@ namespace ConvoyManager.World
                     var hex = new Hex
                     {
                         Coordinates = new int2(x, y),
-                        IsDiscovered = (x == 1 && y == 1), // Открыт только центральный гекс
+                        IsDiscovered = (x == 1 && y == 1), // пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ
                         CityIndices = new List<int>()
                     };
 
@@ -91,13 +91,9 @@ namespace ConvoyManager.World
             if (!hex.IsDiscovered)
             {
                 hex.IsDiscovered = true;
-                _eventBus.Publish(new HexDiscoveredEvent { HexIndex = hexIndex });
+                _eventBus.Publish(new HexDiscoveredEvent(hexIndex));
             }
         }
     }
 
-    public struct HexDiscoveredEvent
-    {
-        public int HexIndex;
-    }
 }

@@ -80,14 +80,10 @@ namespace ConvoyManager.UI
 
             var cargo = new CargoItem[0];
             var entity = _routePlanner.CreateConvoy(selectedIndices.ToArray(), cargo);
-            _eventBus.Publish(new ConvoyCreatedEvent { ConvoyEntity = entity });
+            _eventBus.Publish(new ConvoyCreatedEvent(entity));
 
             _uiManager.ShowScreen("Map");
         }
     }
 
-    public struct ConvoyCreatedEvent
-    {
-        public Unity.Entities.Entity ConvoyEntity;
-    }
 }
