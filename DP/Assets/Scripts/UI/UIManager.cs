@@ -1,0 +1,77 @@
+using System;
+using System.Collections.Generic;
+using ConvoyManager.Core;
+using UniRx;
+using UnityEngine;
+using UnityEngine.UIElements;
+using VContainer;
+using VContainer.Unity;
+
+namespace ConvoyManager.UI
+{
+    public class UIManager : IStartable, IDisposable, IUIManager
+    {
+        private readonly UIDocument _uiDocument;
+        private readonly EventBus _eventBus;
+        private readonly Dictionary<string, VisualElement> _screens = new Dictionary<string, VisualElement>();
+        private VisualElement _currentScreen;
+        private CompositeDisposable _disposables = new CompositeDisposable();
+
+        public UIManager(UIDocument uiDocument, EventBus eventBus)
+        {
+            _uiDocument = uiDocument;
+            _eventBus = eventBus;
+        }
+
+        public void Start()
+        {
+            var root = _uiDocument.rootVisualElement;
+            root.Clear();
+            _eventBus.Subscribe<ShowScreenEvent>()
+                .Subscribe(evt => ShowScreen(evt.ScreenName))
+                .AddTo(_disposables);
+        }
+
+        public void RegisterScreen(string name, VisualElement screen)
+        {
+            if (!_screens.ContainsKey(name))
+            {
+                screen.style.display = DisplayStyle.None;
+                _uiDocument.rootVisualElement.Add(screen);
+                _screens[name] = screen;
+            }
+        }
+
+        public void ShowScreen(string screenName)
+        {
+            if (_currentScreen != null)
+                _currentScreen.style.display = DisplayStyle.None;
+
+            if (_screens.TryGetValue(screenName, out var screen))
+            {
+                screen.style.display = DisplayStyle.Flex;
+                _currentScreen = screen;
+            }
+        }
+
+        public void HideCurrentScreen()
+        {
+            if (_currentScreen != null)
+            {
+                _currentScreen.style.display = DisplayStyle.None;
+                _currentScreen = null;
+            }
+        }
+
+        public void Dispose()
+        {
+            _disposables.Dispose();
+        }
+    }
+
+    public struct ShowScreenEvent
+    {
+        public string ScreenName;
+        public ShowScreenEvent(string name) => ScreenName = name;
+    }
+}
