@@ -1,0 +1,34 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: dc71f6a01ae0e2644b9fb470dfd90be1, type: 3}
+  m_Name: GameConfig
+  m_EditorClassIdentifier: Assembly-CSharp::ConvoyManager.Data.GameConfig
+  StartGold: 200
+  StartCarts: 1
+  StartMercenaries: 2
+  MaxConvoys: 3
+  MaxCarts: 10
+  MaxMercenaries: 50
+  PriceRecoveryRate: 0.07
+  ReputationPriceDiscount: 0.2
+  ReputationPricePenalty: 0.2
+  MercenaryAttackPerUnit: 2
+  CaptainGachaCost: 500
+  CaptainGachaCommonWeight: 50
+  CaptainGachaRareWeight: 30
+  CaptainGachaEpicWeight: 15
+  CaptainGachaLegendaryWeight: 5
+  EventCheckInterval: 60
+  EventProbability: 0.3
+  FoodConsumptionPerSec: 0.5
+  WearRatePerSec: 0.1
+  DefaultSpeed: 1

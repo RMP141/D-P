@@ -1,4 +1,7 @@
 using ConvoyManager.Core;
+using ConvoyManager.Data;
+using ConvoyManager.Economy;
+using ConvoyManager.Player;
 using ConvoyManager.Travel;
 using ConvoyManager.World;
 using System.Collections.Generic;
@@ -13,40 +16,129 @@ namespace ConvoyManager.UI
         private readonly IWorldState _worldState;
         private readonly IRoutePlanner _routePlanner;
         private readonly EventBus _eventBus;
-        private readonly IUIManager _uiManager;
+        private readonly IPlayerProgress _playerProgress;
+        private readonly IEconomyEngine _economyEngine;
 
         private VisualElement _root;
         private List<DropdownField> _cityDropdowns = new List<DropdownField>();
         private Button _createButton;
+        private VisualElement _cargoContainer;
+        private List<VisualElement> _cargoRows = new List<VisualElement>();
+        private Dictionary<int, IntegerField> _cargoQtyFields = new Dictionary<int, IntegerField>();
 
-        public RoutePlannerScreen(IWorldState worldState, IRoutePlanner routePlanner, EventBus eventBus, IUIManager uiManager)
+        public RoutePlannerScreen(IWorldState worldState, IRoutePlanner routePlanner, EventBus eventBus, IPlayerProgress playerProgress, IEconomyEngine economyEngine)
         {
             _worldState = worldState;
             _routePlanner = routePlanner;
             _eventBus = eventBus;
-            _uiManager = uiManager;
+            _playerProgress = playerProgress;
+            _economyEngine = economyEngine;
         }
 
         public void Initialize(VisualElement rootVisualElement)
         {
             var visualTree = Resources.Load<VisualTreeAsset>("UI/RoutePlannerScreen");
             _root = visualTree.CloneTree();
-            _uiManager.RegisterScreen("RoutePlanner", _root);
+            _root.style.position = Position.Absolute;
+            _root.style.top = 40;
+            _root.style.left = 0;
+            _root.style.right = 0;
+            _root.style.bottom = 0;
+            _root.style.display = DisplayStyle.None;
+            rootVisualElement.Add(_root);
 
             var cityContainer = _root.Q<VisualElement>("city-dropdowns");
             for (int i = 0; i < 5; i++)
             {
                 var dropdown = new DropdownField($"City {i + 1}");
-                dropdown.choices = GetCityNames();
                 _cityDropdowns.Add(dropdown);
                 cityContainer.Add(dropdown);
             }
+
+            _cargoContainer = _root.Q<VisualElement>("cargo-container");
 
             _createButton = _root.Q<Button>("create-button");
             _createButton.clicked += OnCreateClicked;
 
             var closeButton = _root.Q<Button>("close-button");
-            closeButton.clicked += () => _uiManager.HideCurrentScreen();
+            closeButton.clicked += () => Hide();
+        }
+
+        public void Show()
+        {
+            RefreshCities();
+            BringToFront();
+            _root.style.display = DisplayStyle.Flex;
+        }
+
+        public void Hide()
+        {
+            _root.style.display = DisplayStyle.None;
+        }
+
+        private void BringToFront()
+        {
+            var parent = _root.parent;
+            if (parent != null)
+            {
+                _root.RemoveFromHierarchy();
+                parent.Add(_root);
+            }
+        }
+
+        public void RefreshCities()
+        {
+            var cityNames = GetCityNames();
+            foreach (var dropdown in _cityDropdowns)
+                dropdown.choices = cityNames;
+
+            if (_cityDropdowns.Count >= 2 && cityNames.Count >= 2)
+            {
+                _cityDropdowns[0].value = cityNames[0];
+                _cityDropdowns[1].value = cityNames[^1];
+            }
+
+            RefreshCargo();
+        }
+
+        private void RefreshCargo()
+        {
+            _cargoContainer.Clear();
+            _cargoRows.Clear();
+            _cargoQtyFields.Clear();
+
+            foreach (var kvp in _playerProgress.Inventory)
+            {
+                if (kvp.Value <= 0) continue;
+                var item = _economyEngine.AllItems.FirstOrDefault(i => i.ID == kvp.Key);
+                if (item == null) continue;
+
+                var row = new VisualElement();
+                row.style.flexDirection = FlexDirection.Row;
+                row.style.alignItems = Align.Center;
+                row.style.paddingLeft = 5;
+                row.style.minHeight = 25;
+
+                var nameLabel = new Label(item.Name);
+                nameLabel.style.width = 120;
+                row.Add(nameLabel);
+
+                var qtyField = new IntegerField();
+                qtyField.style.width = 60;
+                qtyField.value = 0;
+                qtyField.isDelayed = true;
+                row.Add(qtyField);
+
+                _cargoQtyFields[item.ID] = qtyField;
+
+                var availableLabel = new Label($"avail: {kvp.Value}");
+                availableLabel.style.width = 80;
+                availableLabel.style.color = Color.gray;
+                row.Add(availableLabel);
+
+                _cargoContainer.Add(row);
+                _cargoRows.Add(row);
+            }
         }
 
         private List<string> GetCityNames()
@@ -78,12 +170,26 @@ namespace ConvoyManager.UI
                 return;
             }
 
-            var cargo = new CargoItem[0];
-            var entity = _routePlanner.CreateConvoy(selectedIndices.ToArray(), cargo);
+            var cargoItems = new List<CargoItem>();
+            foreach (var kvp in _cargoQtyFields)
+            {
+                int qty = kvp.Value.value;
+                if (qty > 0)
+                {
+                    int available = _playerProgress.Inventory.ContainsKey(kvp.Key) ? _playerProgress.Inventory[kvp.Key] : 0;
+                    int loadQty = Mathf.Min(qty, available);
+                    if (loadQty > 0)
+                    {
+                        cargoItems.Add(new CargoItem { ItemId = kvp.Key, Quantity = loadQty });
+                        _playerProgress.RemoveItem(kvp.Key, loadQty);
+                    }
+                }
+            }
+
+            var entity = _routePlanner.CreateConvoy(selectedIndices.ToArray(), cargoItems.ToArray());
             _eventBus.Publish(new ConvoyCreatedEvent(entity));
 
-            _uiManager.ShowScreen("Map");
+            Hide();
         }
     }
-
 }

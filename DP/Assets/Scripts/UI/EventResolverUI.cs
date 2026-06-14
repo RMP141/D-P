@@ -1,7 +1,6 @@
 using ConvoyManager.Core;
 using ConvoyManager.Events;
 using ConvoyManager.Data;
-using UniRx;
 using UnityEngine;
 using UnityEngine.UIElements;
 
@@ -10,37 +9,35 @@ namespace ConvoyManager.UI
     public class EventResolverUI
     {
         private readonly EventResolver _eventResolver;
-        private readonly EventBus _eventBus;
-        private readonly IUIManager _uiManager;
 
         private VisualElement _root;
         private Label _titleLabel;
         private Label _descLabel;
         private VisualElement _buttonsContainer;
-        private CompositeDisposable _disposables = new CompositeDisposable();
 
-        public EventResolverUI(EventResolver eventResolver, EventBus eventBus, IUIManager uiManager)
+        public EventResolverUI(EventResolver eventResolver)
         {
             _eventResolver = eventResolver;
-            _eventBus = eventBus;
-            _uiManager = uiManager;
         }
 
         public void Initialize(VisualElement rootVisualElement)
         {
             var visualTree = Resources.Load<VisualTreeAsset>("UI/EventResolverUI");
             _root = visualTree.CloneTree();
+            _root.style.position = Position.Absolute;
+            _root.style.top = 40;
+            _root.style.left = 0;
+            _root.style.right = 0;
+            _root.style.bottom = 0;
             _root.style.display = DisplayStyle.None;
-            _uiManager.RegisterScreen("EventResolver", _root);
+            rootVisualElement.Add(_root);
 
             _titleLabel = _root.Q<Label>("title");
             _descLabel = _root.Q<Label>("description");
             _buttonsContainer = _root.Q<VisualElement>("buttons");
-
-            _eventBus.Subscribe<EventTriggeredMessage>().Subscribe(ShowEvent).AddTo(_disposables);
         }
 
-        private void ShowEvent(EventTriggeredMessage msg)
+        public void Show(EventTriggeredMessage msg)
         {
             _titleLabel.text = msg.EventData.Title;
             _descLabel.text = msg.EventData.Description;
@@ -53,13 +50,29 @@ namespace ConvoyManager.UI
                 var btn = new Button(() =>
                 {
                     _eventResolver.Resolve(msg.EventData, index);
-                    _uiManager.HideCurrentScreen();
+                    Hide();
                 });
                 btn.text = option.ButtonText;
                 _buttonsContainer.Add(btn);
             }
 
-            _uiManager.ShowScreen("EventResolver");
+            BringToFront();
+            _root.style.display = DisplayStyle.Flex;
+        }
+
+        public void Hide()
+        {
+            _root.style.display = DisplayStyle.None;
+        }
+
+        private void BringToFront()
+        {
+            var parent = _root.parent;
+            if (parent != null)
+            {
+                _root.RemoveFromHierarchy();
+                parent.Add(_root);
+            }
         }
     }
 }

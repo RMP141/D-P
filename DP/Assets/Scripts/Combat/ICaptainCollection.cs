@@ -9,5 +9,8 @@ namespace ConvoyManager.Combat
         CaptainDataSO ActiveCaptain { get; }
         bool SetActiveCaptain(int id);
         bool AddCaptain(CaptainDataSO captain);
+        int[] GetAllCaptainIds();
+        int GetActiveCaptainId();
+        void Clear();
     }
 }

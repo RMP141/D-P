@@ -1,0 +1,11 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements">
+  <ui:VisualElement style="flex-direction: row; padding: 5px; align-items: center;">
+    <ui:Label name="name" text="Item" style="width: 100px; font-size: 14px;" />
+    <ui:Label name="owned" text="" style="width: 60px; font-size: 12px; color: gray;" />
+    <ui:Label name="buy-price" text="0" style="width: 55px;" />
+    <ui:Button name="buy-button" text="Buy" style="width: 50px; height: 25px; font-size: 12px;" />
+    <ui:IntegerField name="quantity" value="1" style="width: 50px;" />
+    <ui:Label name="sell-price" text="0" style="width: 55px; margin-left: 5px;" />
+    <ui:Button name="sell-button" text="Sell" style="width: 50px; height: 25px; font-size: 12px;" />
+  </ui:VisualElement>
+</ui:UXML>

@@ -1,0 +1,19 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e0c6df0f340848144aa0af87e7da498b, type: 3}
+  m_Name: HexTileConfig
+  m_EditorClassIdentifier: Assembly-CSharp::ConvoyManager.Data.HexTileConfig
+  HexTile: {fileID: 11400000, guid: 8ce70ba640125a745bb8b12c1861a3b4, type: 2}
+  FogTile: {fileID: 11400000, guid: a92ca5b3eaf77a94d998f47c333d5c71, type: 2}
+  CellLayout: 0
+  CellSwizzle: 0
+  CellSize: {x: 1, y: 1, z: 0}

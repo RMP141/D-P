@@ -33,20 +33,22 @@ namespace ConvoyManager.World
                 {
                     var hex = new Hex
                     {
+                        Index = _hexes.Count,
                         Coordinates = new int2(x, y),
-                        IsDiscovered = (x == 1 && y == 1), // ������ ������ ����������� ����
+                        IsDiscovered = (x == 1 && y == 1),
                         CityIndices = new List<int>()
                     };
 
-                    int cityCount = random.NextInt(3, 28);
+                    int cityCount = random.NextInt(1, 4);
                     for (int i = 0; i < cityCount; i++)
                     {
+                        string[] cityPrefixes = { "A", "B", "C" };
                         var city = new City
                         {
                             Index = _cities.Count,
                             HexIndex = _hexes.Count,
                             Faction = (Faction)random.NextInt(0, 11),
-                            Name = $"City_{_cities.Count}"
+                            Name = $"{cityPrefixes[i]}_{x}_{y}"
                         };
                         _cities.Add(city);
                         hex.CityIndices.Add(city.Index);
@@ -61,10 +63,12 @@ namespace ConvoyManager.World
             _hexes.Clear();
             _cities.Clear();
 
-            foreach (var hexData in data.Hexes)
+            for (int i = 0; i < data.Hexes.Length; i++)
             {
+                var hexData = data.Hexes[i];
                 var hex = new Hex
                 {
+                    Index = i,
                     Coordinates = hexData.Coordinates,
                     IsDiscovered = hexData.IsDiscovered,
                     CityIndices = new List<int>(hexData.CityIndices)

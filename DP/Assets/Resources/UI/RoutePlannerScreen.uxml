@@ -1,0 +1,13 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements">
+  <ui:VisualElement style="flex-grow: 1; padding: 10px; background-color: rgba(0, 0, 0, 0.85);">
+    <ui:VisualElement style="flex-direction: row; justify-content: space-between;">
+      <ui:Label text="Route Planner" style="font-size: 20px; -unity-font-style: bold;" />
+      <ui:Button name="close-button" text="X" style="width: 30px;" />
+    </ui:VisualElement>
+    <ui:Label text="Select cities for the route:" style="margin-top: 10px;" />
+    <ui:VisualElement name="city-dropdowns" style="flex-direction: column; margin-top: 5px;" />
+    <ui:Label text="Cargo to load:" style="margin-top: 10px;" />
+    <ui:VisualElement name="cargo-container" style="flex-direction: column; margin-top: 5px; flex-grow: 1; overflow-y: auto;" />
+    <ui:Button name="create-button" text="Create Convoy" style="margin-top: 10px; height: 30px; width: 150px;" />
+  </ui:VisualElement>
+</ui:UXML>

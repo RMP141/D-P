@@ -12,6 +12,8 @@ namespace ConvoyManager.Economy
         void Initialize(IWorldState worldState);
         void DailyUpdate();
         void ApplyEconomicEvent(EconomicEventSO eventData);
+        ActiveEconomicEventData[] GetActiveEventsData();
+        void SetActiveEventsData(ActiveEconomicEventData[] events);
         Dictionary<int, float> GetAllModifiers();
         void SetAllModifiers(Dictionary<int, float> modifiers);
     }

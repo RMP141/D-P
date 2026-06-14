@@ -4,10 +4,11 @@ using Unity.Mathematics;
 namespace ConvoyManager.World
 {
     /// <summary>
-    /// Данные гекса (области мира).
+    /// пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ (пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ).
     /// </summary>
     public class Hex
     {
+        public int Index;
         public int2 Coordinates;
         public bool IsDiscovered;
         public List<int> CityIndices = new List<int>();

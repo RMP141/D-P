@@ -1,0 +1,19 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 11752c560ce101d4aac10066c86f0b1d, type: 3}
+  m_Name: HarvestFestival
+  m_EditorClassIdentifier: Assembly-CSharp::ConvoyManager.Data.EconomicEventSO
+  Title: Harvest Festival
+  Description: A bountiful harvest floods the market with food.
+  DurationDays: 5
+  PriceMultiplier: 0.7
+  AffectedCategories: 00000000

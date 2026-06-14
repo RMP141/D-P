@@ -1,0 +1,14 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements">
+  <ui:VisualElement style="flex-grow: 1; padding: 10px; background-color: rgba(0, 0, 0, 0.85);">
+    <ui:VisualElement style="flex-direction: row; justify-content: space-between;">
+      <ui:Label text="Captain Hiring" style="font-size: 20px; color: white; -unity-font-style: bold;" />
+      <ui:Button name="close-button" text="X" style="width: 30px;" />
+    </ui:VisualElement>
+    <ui:Label name="gold-label" text="Gold: 0" style="font-size: 16px; color: white; margin-top: 10px;" />
+    <ui:Label name="pull-cost-label" text="Hire cost: 500 gold" style="font-size: 14px; color: rgb(200, 200, 200); margin-top: 5px;" />
+    <ui:Button name="pull-button" text="Hire a Captain" style="width: 200px; height: 40px; margin-top: 10px; font-size: 16px;" />
+    <ui:Label name="result-label" text="" style="font-size: 16px; color: rgb(255, 215, 0); margin-top: 10px; white-space: normal;" />
+    <ui:Label text="Your Captains:" style="font-size: 16px; color: white; -unity-font-style: bold; margin-top: 20px;" />
+    <ui:VisualElement name="captains-container" style="flex-grow: 1; margin-top: 5px; overflow-y: auto;" />
+  </ui:VisualElement>
+</ui:UXML>

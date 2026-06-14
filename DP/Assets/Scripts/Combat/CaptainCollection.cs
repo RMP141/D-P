@@ -30,5 +30,24 @@ namespace ConvoyManager.Combat
             _activeCaptain = captain;
             return true;
         }
+
+        public int[] GetAllCaptainIds()
+        {
+            var ids = new int[_captains.Count];
+            for (int i = 0; i < _captains.Count; i++)
+                ids[i] = _captains[i].ID;
+            return ids;
+        }
+
+        public int GetActiveCaptainId()
+        {
+            return _activeCaptain != null ? _activeCaptain.ID : -1;
+        }
+
+        public void Clear()
+        {
+            _captains.Clear();
+            _activeCaptain = null;
+        }
     }
 }

@@ -1,5 +1,6 @@
 using ConvoyManager.Combat;
 using ConvoyManager.Data;
+using ConvoyManager.ECS;
 using ConvoyManager.Economy;
 using ConvoyManager.Events;
 using ConvoyManager.Player;
@@ -18,8 +19,8 @@ namespace ConvoyManager.Core
     public class GameManager : LifetimeScope
     {
         [Header("Configuration")]
-        [SerializeField] private GameConfig _gameConfig;
-        [SerializeField] private HexTileConfig _hexTileConfig;
+        public GameConfig _gameConfig;
+        public HexTileConfig _hexTileConfig;
 
         protected override void Configure(IContainerBuilder builder)
         {
@@ -52,8 +53,26 @@ namespace ConvoyManager.Core
             builder.Register<EventResolver>(Lifetime.Singleton);
 
             // ECS
-            var entityManager = Unity.Entities.World.DefaultGameObjectInjectionWorld.EntityManager;
+            Unity.Entities.EntityManager entityManager;
+            try
+            {
+                var world = Unity.Entities.World.DefaultGameObjectInjectionWorld;
+                if (world == null)
+                {
+                    world = new Unity.Entities.World("Default World", Unity.Entities.WorldFlags.Game);
+                    Unity.Entities.World.DefaultGameObjectInjectionWorld = world;
+                }
+                entityManager = world.EntityManager;
+            }
+            catch
+            {
+                Debug.LogWarning("ECS World not available, creating fallback entity manager");
+                var world = new Unity.Entities.World("Fallback World", Unity.Entities.WorldFlags.Game);
+                Unity.Entities.World.DefaultGameObjectInjectionWorld = world;
+                entityManager = world.EntityManager;
+            }
             builder.RegisterInstance(entityManager);
+            builder.Register<ECSSerializer>(Lifetime.Singleton);
 
             // UI
             var uiDocument = Object.FindFirstObjectByType<UIDocument>();
@@ -63,9 +82,13 @@ namespace ConvoyManager.Core
                 Debug.LogError("UIDocument �� ������ �� �����!");
 
             builder.Register<IUIManager, UIManager>(Lifetime.Singleton).As<IStartable>();
+            builder.Register<MainMenuScreen>(Lifetime.Singleton);
+            builder.Register<SaveLoadSelectScreen>(Lifetime.Singleton);
             builder.Register<MarketScreen>(Lifetime.Singleton);
             builder.Register<RoutePlannerScreen>(Lifetime.Singleton);
             builder.Register<EventResolverUI>(Lifetime.Singleton);
+            builder.Register<CaptainHireScreen>(Lifetime.Singleton);
+            builder.Register<ConfirmDialog>(Lifetime.Singleton);
 
             builder.RegisterEntryPoint<GameFlow>();
         }

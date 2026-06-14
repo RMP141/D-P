@@ -1,16 +1,18 @@
+using System.Linq;
 using ConvoyManager.Core;
 using ConvoyManager.Data;
 using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Tilemaps;
 using VContainer;
+using VContainer.Unity;
 using UniRx;
 
 namespace ConvoyManager.World
 {
     /// <summary>
-    /// Отвечает за визуализацию гексагональной сетки и тумана войны.
-    /// Размещается на GameObject с Grid и Tilemap.
+    /// пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ пїЅ пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ.
+    /// пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅ GameObject пїЅ Grid пїЅ Tilemap.
     /// </summary>
     public class HexGridGenerator : MonoBehaviour
     {
@@ -25,9 +27,6 @@ namespace ConvoyManager.World
         {
             _grid = GetComponent<Grid>();
             _tilemap = GetComponentInChildren<Tilemap>();
-
-            if (_tileConfig != null)
-                ConfigureGrid();
         }
 
         private void ConfigureGrid()
@@ -39,28 +38,95 @@ namespace ConvoyManager.World
 
         private void Start()
         {
+            if (_worldState == null || _eventBus == null || _tileConfig == null)
+            {
+                var scope = GetComponentInParent<LifetimeScope>();
+                if (scope != null)
+                    scope.Container.Inject(this);
+            }
+
             if (_worldState == null || _tileConfig == null)
             {
-                Debug.LogError("HexGridGenerator: зависимости не внедрены");
+                Debug.LogError("HexGridGenerator: пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ");
                 return;
             }
 
-            DrawAllHexes();
+            ConfigureGrid();
+
+            if (_worldState.Hexes.Count > 0)
+                DrawAllHexes();
+            else
+                _eventBus.Subscribe<GameStartedEvent>().Subscribe(_ => DrawAllHexes()).AddTo(this);
+
             _eventBus.Subscribe<HexDiscoveredEvent>().Subscribe(OnHexDiscovered).AddTo(this);
+            _eventBus.Subscribe<GameLoadedEvent>().Subscribe(_ => DrawAllHexes()).AddTo(this);
+        }
+
+        public void Redraw()
+        {
+            DrawAllHexes();
+            var renderer = _tilemap.GetComponent<TilemapRenderer>();
+            if (renderer != null)
+            {
+                renderer.enabled = false;
+                renderer.enabled = true;
+            }
         }
 
         private void DrawAllHexes()
         {
-            _tilemap.ClearAllTiles();
+            if (_tilemap == null || _tileConfig == null)
+            {
+                Debug.LogError("[HexGridGenerator] tilemap or config null");
+                return;
+            }
 
+            bool hexOk = _tileConfig.HexTile != null;
+            bool fogOk = _tileConfig.FogTile != null;
+            Debug.Log($"[HexGridGenerator] HexTile={( hexOk ? _tileConfig.HexTile.name : "NULL")} FogTile={( fogOk ? _tileConfig.FogTile.name : "NULL")}");
+
+            if (!hexOk || !fogOk)
+            {
+                var missingTiles = Resources.LoadAll<TileBase>("Tiles");
+                if (!hexOk && missingTiles.Length > 0) _tileConfig.HexTile = missingTiles[0];
+                if (!fogOk && missingTiles.Length > 1) _tileConfig.FogTile = missingTiles[1];
+                hexOk = _tileConfig.HexTile != null;
+                fogOk = _tileConfig.FogTile != null;
+            }
+
+            var hexes = _worldState.Hexes;
+            var positions = new Vector3Int[hexes.Count];
+            var tiles = new TileBase[hexes.Count];
+            for (int i = 0; i < hexes.Count; i++)
+            {
+                positions[i] = HexCoordinatesToCell(hexes[i].Coordinates);
+                tiles[i] = hexes[i].IsDiscovered ? _tileConfig.HexTile : _tileConfig.FogTile;
+            }
+            _tilemap.SetTiles(positions, tiles);
+            _tilemap.RefreshAllTiles();
+
+            int discoveredCount = hexes.Count(h => h.IsDiscovered);
+            int usedCount = _tilemap.GetUsedTilesCount();
+            Debug.Log($"[HexGridGenerator] DrawAllHexes: {discoveredCount}/{hexes.Count} discovered | tiles set: {usedCount}");
+        }
+
+        public void SetMissingTiles()
+        {
+            if (_tilemap == null || _tileConfig == null) return;
             var hexes = _worldState.Hexes;
             for (int i = 0; i < hexes.Count; i++)
             {
                 var hex = hexes[i];
                 Vector3Int cellPos = HexCoordinatesToCell(hex.Coordinates);
-                TileBase tile = hex.IsDiscovered ? _tileConfig.HexTile : _tileConfig.FogTile;
-                _tilemap.SetTile(cellPos, tile);
+                var existing = _tilemap.GetTile(cellPos);
+                if (existing == null)
+                {
+                    TileBase tile = hex.IsDiscovered ? _tileConfig.HexTile : _tileConfig.FogTile;
+                    if (tile != null)
+                        _tilemap.SetTile(cellPos, tile);
+                }
             }
+            _tilemap.RefreshAllTiles();
         }
 
         private void OnHexDiscovered(HexDiscoveredEvent evt)
@@ -71,21 +137,16 @@ namespace ConvoyManager.World
         }
 
         /// <summary>
-        /// Преобразует координаты гекса (X,Y) в ячейку Tilemap (pointy-top, odd-row offset).
+        /// пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ (X,Y) пїЅ пїЅпїЅпїЅпїЅпїЅпїЅ Tilemap (pointy-top, odd-row offset).
         /// </summary>
         private Vector3Int HexCoordinatesToCell(int2 coords)
         {
-            int row = coords.y;
-            int col = coords.x;
-            int x = col - (row & 1) / 2; // odd-row offset
-            int y = row;
-            int z = -x - y;
-            return new Vector3Int(x, y, z);
+            return new Vector3Int(coords.x, coords.y, 0);
         }
 
         private void OnDestroy()
         {
-            // Очистка подписок при уничтожении объекта
+            // пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ
         }
     }
 }

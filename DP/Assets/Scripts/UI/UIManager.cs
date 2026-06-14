@@ -4,29 +4,38 @@ using ConvoyManager.Core;
 using UniRx;
 using UnityEngine;
 using UnityEngine.UIElements;
-using VContainer;
 using VContainer.Unity;
 
 namespace ConvoyManager.UI
 {
     public class UIManager : IStartable, IDisposable, IUIManager
     {
-        private readonly UIDocument _uiDocument;
+        private UIDocument _uiDocument;
         private readonly EventBus _eventBus;
         private readonly Dictionary<string, VisualElement> _screens = new Dictionary<string, VisualElement>();
         private VisualElement _currentScreen;
+        private VisualElement _screenContainer;
         private CompositeDisposable _disposables = new CompositeDisposable();
 
-        public UIManager(UIDocument uiDocument, EventBus eventBus)
+        public UIManager(EventBus eventBus)
         {
-            _uiDocument = uiDocument;
             _eventBus = eventBus;
         }
 
         public void Start()
         {
+            _uiDocument = UnityEngine.Object.FindFirstObjectByType<UIDocument>();
+            if (_uiDocument == null) return;
+
             var root = _uiDocument.rootVisualElement;
-            root.Clear();
+            root.style.flexGrow = 1;
+            root.style.flexDirection = FlexDirection.Column;
+
+            _screenContainer = new VisualElement();
+            _screenContainer.style.flexGrow = 1;
+            _screenContainer.style.flexDirection = FlexDirection.Column;
+            root.Add(_screenContainer);
+
             _eventBus.Subscribe<ShowScreenEvent>()
                 .Subscribe(evt => ShowScreen(evt.ScreenName))
                 .AddTo(_disposables);
@@ -34,10 +43,13 @@ namespace ConvoyManager.UI
 
         public void RegisterScreen(string name, VisualElement screen)
         {
+            if (_uiDocument == null) return;
             if (!_screens.ContainsKey(name))
             {
                 screen.style.display = DisplayStyle.None;
-                _uiDocument.rootVisualElement.Add(screen);
+                screen.style.flexGrow = 1;
+                screen.style.flexShrink = 0;
+                _screenContainer.Add(screen);
                 _screens[name] = screen;
             }
         }

@@ -1,0 +1,21 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements">
+  <ui:VisualElement name="save-select-overlay" style="flex-grow: 1; justify-content: center; align-items: center; background-color: rgba(0, 0, 0, 0.92);">
+    <ui:Label name="title-label" text="Select Slot" style="font-size: 28px; color: rgb(200, 200, 200); -unity-font-style: bold; margin-bottom: 30px;" />
+    <ui:VisualElement style="flex-direction: row; align-items: center;">
+      <ui:Button name="slot-1-btn" text="Slot 1" style="width: 320px; height: 60px; font-size: 16px;" />
+      <ui:Button name="delete-slot-1-btn" text="X" style="width: 30px; height: 30px; margin-left: 5px; background-color: rgb(120, 30, 30); color: white; font-size: 14px; -unity-font-style: bold;" />
+    </ui:VisualElement>
+    <ui:VisualElement style="flex-direction: row; align-items: center; margin-top: 10px;">
+      <ui:Button name="slot-2-btn" text="Slot 2" style="width: 320px; height: 60px; font-size: 16px;" />
+      <ui:Button name="delete-slot-2-btn" text="X" style="width: 30px; height: 30px; margin-left: 5px; background-color: rgb(120, 30, 30); color: white; font-size: 14px; -unity-font-style: bold;" />
+    </ui:VisualElement>
+    <ui:VisualElement style="flex-direction: row; align-items: center; margin-top: 10px;">
+      <ui:Button name="slot-3-btn" text="Slot 3" style="width: 320px; height: 60px; font-size: 16px;" />
+      <ui:Button name="delete-slot-3-btn" text="X" style="width: 30px; height: 30px; margin-left: 5px; background-color: rgb(120, 30, 30); color: white; font-size: 14px; -unity-font-style: bold;" />
+    </ui:VisualElement>
+    <ui:VisualElement style="flex-direction: row; margin-top: 30px;">
+      <ui:Button name="back-btn" text="Back" style="width: 150px; height: 50px; font-size: 18px;" />
+      <ui:Button name="main-menu-btn" text="Main Menu" style="width: 150px; height: 50px; font-size: 18px; margin-left: 10px;" />
+    </ui:VisualElement>
+  </ui:VisualElement>
+</ui:UXML>

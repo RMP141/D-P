@@ -1,0 +1,30 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cac10ceffa35eb24fa18fef3643b7eb6, type: 3}
+  m_Name: BrokenWheel
+  m_EditorClassIdentifier: Assembly-CSharp::ConvoyManager.Data.EventDataSO
+  Title: Broken Wheel
+  Description: A wheel on your cart has cracked.
+  Options:
+  - ButtonText: Repair (30g)
+    Effects:
+    - Type: 2
+      Value: 30
+      ItemId: 0
+    - Type: 9
+      Value: 20
+      ItemId: 0
+  - ButtonText: Fix it yourself
+    Effects:
+    - Type: 8
+      Value: 5
+      ItemId: 0
