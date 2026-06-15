@@ -36,9 +36,6 @@ namespace ConvoyManager.UI
             _screenContainer.style.flexDirection = FlexDirection.Column;
             root.Add(_screenContainer);
 
-            _eventBus.Subscribe<ShowScreenEvent>()
-                .Subscribe(evt => ShowScreen(evt.ScreenName))
-                .AddTo(_disposables);
         }
 
         public void RegisterScreen(string name, VisualElement screen)
@@ -64,6 +61,8 @@ namespace ConvoyManager.UI
                 screen.style.display = DisplayStyle.Flex;
                 _currentScreen = screen;
             }
+
+            _eventBus.Publish(new ShowScreenEvent(screenName));
         }
 
         public void HideCurrentScreen()

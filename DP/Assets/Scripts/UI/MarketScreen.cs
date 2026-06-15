@@ -189,6 +189,7 @@ namespace ConvoyManager.UI
                 _currentCity.AddToPlayerCache(item.ID, qty);
                 _economyEngine.ModifyCityStock(_currentCity, item.ID, -qty);
                 _economyEngine.ApplyTransaction(item, _currentCity, qty, true);
+                _eventBus.Publish(new ShowToastRequest($"Bought {qty} {item.Name} for {totalCost} gold"));
                 UpdateGoldWeight();
                 _listView.RefreshItems();
             });
@@ -201,14 +202,16 @@ namespace ConvoyManager.UI
                 if (qty <= 0) return;
                 if (!_economyEngine.CanSellToCity(item, _currentCity, qty))
                 {
-                    Debug.Log("City warehouse is full, cannot sell here");
+                    _eventBus.Publish(new ShowToastRequest("City warehouse is full, cannot sell here"));
                     return;
                 }
 
                 _currentCity.RemoveFromPlayerCache(item.ID, qty);
-                _playerProgress.AddGold((int)(sellPrice * qty));
+                int revenue = (int)(sellPrice * qty);
+                _playerProgress.AddGold(revenue);
                 _economyEngine.ModifyCityStock(_currentCity, item.ID, qty);
                 _economyEngine.ApplyTransaction(item, _currentCity, qty, false);
+                _eventBus.Publish(new ShowToastRequest($"Sold {qty} {item.Name} for {revenue} gold"));
                 UpdateGoldWeight();
                 _listView.RefreshItems();
             });

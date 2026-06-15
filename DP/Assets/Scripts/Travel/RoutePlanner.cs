@@ -6,7 +6,6 @@ using ConvoyManager.Utils;
 using ConvoyManager.World;
 using Unity.Collections;
 using Unity.Entities;
-using Unity.Mathematics;
 
 namespace ConvoyManager.Travel
 {
@@ -44,7 +43,6 @@ namespace ConvoyManager.Travel
 
             var entity = _entityManager.CreateEntity(
                 ComponentType.ReadWrite<ConvoyTag>(),
-                ComponentType.ReadWrite<PositionComponent>(),
                 ComponentType.ReadWrite<MovementSpeed>(),
                 ComponentType.ReadWrite<ConvoyStateComponent>(),
                 ComponentType.ReadWrite<ResourceComponent>(),

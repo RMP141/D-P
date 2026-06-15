@@ -1,11 +1,13 @@
 using ConvoyManager.Core;
 using ConvoyManager.Data;
+using ConvoyManager.ECS;
 using ConvoyManager.Economy;
 using ConvoyManager.Player;
 using ConvoyManager.Travel;
 using ConvoyManager.World;
 using System.Collections.Generic;
 using System.Linq;
+using Unity.Entities;
 using UnityEngine;
 using UnityEngine.UIElements;
 
@@ -18,6 +20,7 @@ namespace ConvoyManager.UI
         private readonly EventBus _eventBus;
         private readonly IPlayerProgress _playerProgress;
         private readonly IEconomyEngine _economyEngine;
+        private readonly EntityManager _entityManager;
 
         private VisualElement _root;
         private List<DropdownField> _cityDropdowns = new List<DropdownField>();
@@ -25,18 +28,22 @@ namespace ConvoyManager.UI
         private VisualElement _cargoContainer;
         private List<VisualElement> _cargoRows = new List<VisualElement>();
         private Dictionary<int, IntegerField> _cargoQtyFields = new Dictionary<int, IntegerField>();
+        private EntityQuery _convoyQuery;
 
-        public RoutePlannerScreen(IWorldState worldState, IRoutePlanner routePlanner, EventBus eventBus, IPlayerProgress playerProgress, IEconomyEngine economyEngine)
+        public RoutePlannerScreen(IWorldState worldState, IRoutePlanner routePlanner, EventBus eventBus, IPlayerProgress playerProgress, IEconomyEngine economyEngine, EntityManager entityManager)
         {
             _worldState = worldState;
             _routePlanner = routePlanner;
             _eventBus = eventBus;
             _playerProgress = playerProgress;
             _economyEngine = economyEngine;
+            _entityManager = entityManager;
         }
 
         public void Initialize(VisualElement rootVisualElement)
         {
+            _convoyQuery = _entityManager.CreateEntityQuery(typeof(ConvoyTag));
+
             var visualTree = Resources.Load<VisualTreeAsset>("UI/RoutePlannerScreen");
             _root = visualTree.CloneTree();
             _root.style.position = Position.Absolute;
@@ -54,6 +61,9 @@ namespace ConvoyManager.UI
                 _cityDropdowns.Add(dropdown);
                 cityContainer.Add(dropdown);
             }
+
+            if (_cityDropdowns.Count > 0)
+                _cityDropdowns[0].RegisterValueChangedCallback(_ => RefreshCargo());
 
             _cargoContainer = _root.Q<VisualElement>("cargo-container");
 
@@ -97,9 +107,6 @@ namespace ConvoyManager.UI
                 _cityDropdowns[0].value = cityNames[0];
                 _cityDropdowns[1].value = cityNames[^1];
             }
-
-            if (_cityDropdowns.Count > 0)
-                _cityDropdowns[0].RegisterValueChangedCallback(_ => RefreshCargo());
 
             RefreshCargo();
         }
@@ -164,6 +171,13 @@ namespace ConvoyManager.UI
 
         private void OnCreateClicked()
         {
+            int convoyCount = _convoyQuery.CalculateEntityCount();
+            if (convoyCount >= _playerProgress.MaxConvoys)
+            {
+                Debug.LogWarning($"[RoutePlanner] Max convoys reached ({_playerProgress.MaxConvoys})");
+                return;
+            }
+
             var selectedIndices = new List<int>();
             foreach (var dropdown in _cityDropdowns)
             {

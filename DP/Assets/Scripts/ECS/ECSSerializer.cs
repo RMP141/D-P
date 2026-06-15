@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using Unity.Collections;
 using Unity.Entities;
-using Unity.Mathematics;
 using UnityEngine;
 
 namespace ConvoyManager.ECS
@@ -30,17 +29,25 @@ namespace ConvoyManager.ECS
 
             foreach (var entity in entities)
             {
-                var entry = new EntityData
-                {
-                    Position = _entityManager.GetComponentData<PositionComponent>(entity).Value,
-                    Speed = _entityManager.GetComponentData<MovementSpeed>(entity).Value,
-                    State = _entityManager.GetComponentData<ConvoyStateComponent>(entity).State,
-                    Progress = _entityManager.GetComponentData<ConvoyStateComponent>(entity).Progress,
-                    Food = _entityManager.GetComponentData<ResourceComponent>(entity).Food,
-                    Wear = _entityManager.GetComponentData<ResourceComponent>(entity).Wear
-                };
+                var entry = new EntityData();
 
-                // ������������ ����� (Blob)
+                if (_entityManager.HasComponent<MovementSpeed>(entity))
+                    entry.Speed = _entityManager.GetComponentData<MovementSpeed>(entity).Value;
+                if (_entityManager.HasComponent<ConvoyStateComponent>(entity))
+                {
+                    var state = _entityManager.GetComponentData<ConvoyStateComponent>(entity);
+                    entry.State = state.State;
+                    entry.Progress = state.Progress;
+                }
+                if (_entityManager.HasComponent<ResourceComponent>(entity))
+                {
+                    var res = _entityManager.GetComponentData<ResourceComponent>(entity);
+                    entry.Food = res.Food;
+                    entry.Wear = res.Wear;
+                }
+                if (_entityManager.HasComponent<EventTimerComponent>(entity))
+                    entry.TimeUntilCheck = _entityManager.GetComponentData<EventTimerComponent>(entity).TimeUntilCheck;
+
                 if (_entityManager.HasComponent<CargoComponent>(entity))
                 {
                     var cargoComp = _entityManager.GetComponentData<CargoComponent>(entity);
@@ -60,7 +67,6 @@ namespace ConvoyManager.ECS
                     }
                 }
 
-                // ������������ �������� (Blob)
                 if (_entityManager.HasComponent<RouteComponent>(entity))
                 {
                     var routeComp = _entityManager.GetComponentData<RouteComponent>(entity);
@@ -94,7 +100,6 @@ namespace ConvoyManager.ECS
                 var compTypes = new List<ComponentType>
                 {
                     typeof(ConvoyTag),
-                    typeof(PositionComponent),
                     typeof(MovementSpeed),
                     typeof(ConvoyStateComponent),
                     typeof(ResourceComponent),
@@ -108,7 +113,6 @@ namespace ConvoyManager.ECS
 
                 var entity = _entityManager.CreateEntity(compTypes.ToArray());
 
-                _entityManager.SetComponentData(entity, new PositionComponent { Value = entry.Position });
                 _entityManager.SetComponentData(entity, new MovementSpeed { Value = entry.Speed });
                 _entityManager.SetComponentData(entity, new ConvoyStateComponent
                 {
@@ -122,7 +126,7 @@ namespace ConvoyManager.ECS
                 });
                 _entityManager.SetComponentData(entity, new EventTimerComponent
                 {
-                    TimeUntilCheck = 60f
+                    TimeUntilCheck = entry.TimeUntilCheck
                 });
 
                 if (hasCargo)
@@ -177,12 +181,12 @@ namespace ConvoyManager.ECS
     [System.Serializable]
     public class EntityData
     {
-        public float3 Position;
         public float Speed;
         public ConvoyState State;
         public float Progress;
         public float Food;
         public float Wear;
+        public float TimeUntilCheck;
         public CargoItemSerialized[] Cargo;
         public int[] RouteCityIndices;
         public int CurrentSegment;

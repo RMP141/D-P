@@ -126,6 +126,30 @@ namespace ConvoyManager.Core
             _eventBus.Subscribe<ConvoyArrivedEvent>().Subscribe(OnConvoyArrived).AddTo(_disposables);
             _eventBus.Subscribe<ConvoyCreatedEvent>().Subscribe(OnConvoyCreated).AddTo(_disposables);
             _eventBus.Subscribe<EventTriggeredMessage>().Subscribe(msg => { HideAllOverlays(); _eventResolverUI.Show(msg); SetMapInteraction(false); }).AddTo(_disposables);
+            _eventBus.Subscribe<CombatResolvedEvent>().Subscribe(evt => ShowToast(evt.Result == CombatResult.Victory ? "Combat victory! +30 gold" : "Combat defeat...")).AddTo(_disposables);
+            _eventBus.Subscribe<DamageCartEvent>().Subscribe(evt => ShowToast($"Cart damaged by {evt.DamageAmount}!")).AddTo(_disposables);
+            _eventBus.Subscribe<RepairCartEvent>().Subscribe(evt => ShowToast($"Cart repaired by {evt.RepairAmount}!")).AddTo(_disposables);
+            _eventBus.Subscribe<EventResolvedEvent>().Subscribe(evt => ShowToast($"Event: {evt.EventTitle}")).AddTo(_disposables);
+            _eventBus.Subscribe<EconomicEventAppliedEvent>().Subscribe(evt => ShowToast($"Economic shift: {evt.EventData.Title}")).AddTo(_disposables);
+            _eventBus.Subscribe<ShowToastRequest>().Subscribe(r => ShowToast(r.Message, r.Duration)).AddTo(_disposables);
+            _eventBus.Subscribe<OutOfFoodEvent>().Subscribe(evt =>
+            {
+                ShowToast("A convoy has run out of food and stopped!");
+                var em = Unity.Entities.World.DefaultGameObjectInjectionWorld.EntityManager;
+                if (em.HasComponent<ConvoyStateComponent>(evt.ConvoyEntity))
+                {
+                    em.SetComponentData(evt.ConvoyEntity, new ConvoyStateComponent { State = ConvoyState.WaitingForInput, Progress = 0f });
+                }
+            }).AddTo(_disposables);
+            _eventBus.Subscribe<BrokenEvent>().Subscribe(evt =>
+            {
+                ShowToast("A convoy has broken down and stopped!");
+                var em = Unity.Entities.World.DefaultGameObjectInjectionWorld.EntityManager;
+                if (em.HasComponent<ConvoyStateComponent>(evt.ConvoyEntity))
+                {
+                    em.SetComponentData(evt.ConvoyEntity, new ConvoyStateComponent { State = ConvoyState.WaitingForInput, Progress = 0f });
+                }
+            }).AddTo(_disposables);
             Observable.Interval(System.TimeSpan.FromSeconds(1)).Subscribe(_ => UpdateHUD()).AddTo(_disposables);
 
             _mainMenuScreen.OnNewGameClicked += StartGame;
@@ -269,6 +293,7 @@ namespace ConvoyManager.Core
             _gameStarted = true;
             _hasActiveSession = false;
             _ecsWorld = Unity.Entities.World.DefaultGameObjectInjectionWorld;
+            _economicEventManager.Start();
             SetECSPaused(false);
             SetupHexClickHandler();
             CreateToolbar();
@@ -467,12 +492,20 @@ namespace ConvoyManager.Core
             var em = world.EntityManager;
 
             var route = em.GetComponentData<RouteComponent>(evt.ConvoyEntity);
+            if (!route.Blob.IsCreated || route.Blob.Value.CityIndices.Length < 2)
+            {
+                _cleanupSystem?.PendingDestroy.Enqueue(evt.ConvoyEntity);
+                return;
+            }
             ref var routeBlob = ref route.Blob.Value;
             int arrivalCityIdx = routeBlob.CityIndices[routeBlob.CurrentSegment + 1];
             var arrivalCity = _worldState.GetCity(arrivalCityIdx);
 
-            var cargo = em.GetComponentData<CargoComponent>(evt.ConvoyEntity);
-            if (cargo.Blob.IsCreated)
+            var cargo = default(CargoComponent);
+            bool hasCargo = em.HasComponent<CargoComponent>(evt.ConvoyEntity);
+            if (hasCargo)
+                cargo = em.GetComponentData<CargoComponent>(evt.ConvoyEntity);
+            if (hasCargo && cargo.Blob.IsCreated)
             {
                 ref var cargoBlob = ref cargo.Blob.Value;
                 string itemSummary = "";
@@ -557,7 +590,14 @@ namespace ConvoyManager.Core
             var hireBtn = new Button(() =>
             {
                 if (_mercManager.Hire())
+                {
+                    ShowToast("Hired a mercenary! -50 gold");
                     UpdateHUD();
+                }
+                else
+                {
+                    ShowToast("Cannot hire: not enough gold or at max mercenaries");
+                }
             });
             hireBtn.text = "Hire";
             hireBtn.style.width = 60;
@@ -571,7 +611,14 @@ namespace ConvoyManager.Core
             var fireBtn = new Button(() =>
             {
                 if (_mercManager.Fire())
+                {
+                    ShowToast("Fired a mercenary! +25 gold refund");
                     UpdateHUD();
+                }
+                else
+                {
+                    ShowToast("No mercenaries to fire");
+                }
             });
             fireBtn.text = "Fire";
             fireBtn.style.width = 60;
@@ -782,6 +829,7 @@ namespace ConvoyManager.Core
                 _toolbar.RemoveFromHierarchy();
                 _toolbar = null;
             }
+            _economicEventManager.Stop();
             SetMapInteraction(false);
             SetECSPaused(true);
             _gameStarted = false;

@@ -63,9 +63,13 @@ namespace ConvoyManager.Rendering
         private float3 CalculatePosition(Entity entity, ConvoyStateComponent state)
         {
             var route = EntityManager.GetComponentData<RouteComponent>(entity);
+            if (!route.Blob.IsCreated) return float3.zero;
+
             ref var routeBlob = ref route.Blob.Value;
+            if (routeBlob.CityIndices.Length < 2) return float3.zero;
 
             int seg = routeBlob.CurrentSegment;
+            if (seg < 0 || seg + 1 >= routeBlob.CityIndices.Length) return float3.zero;
             int cityA = routeBlob.CityIndices[seg];
             int cityB = routeBlob.CityIndices[seg + 1];
 

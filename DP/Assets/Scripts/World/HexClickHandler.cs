@@ -20,6 +20,7 @@ namespace ConvoyManager.World
         private bool _scoutInProgress;
         private bool _active = true;
         private float _scoutCooldown;
+        private bool _allDiscoveredNotified;
 
         private const float ScoutCooldownSeconds = 2f;
 
@@ -51,13 +52,20 @@ namespace ConvoyManager.World
 
             if (!Mouse.current.leftButton.wasPressedThisFrame) return;
 
+            if (!_allDiscoveredNotified && _worldState.Hexes.All(h => h.IsDiscovered))
+            {
+                _allDiscoveredNotified = true;
+                _eventBus.Publish(new ShowToastRequest("All hexes discovered!", 2f));
+                return;
+            }
+
             var mousePos = Mouse.current.position.ReadValue();
             var worldPos = _camera.ScreenToWorldPoint(new Vector3(mousePos.x, mousePos.y, 10));
             var cellPos = _tilemap.WorldToCell(worldPos);
 
             if (_scoutCooldown > 0)
             {
-                Debug.Log($"Scout on cooldown ({_scoutCooldown:F1}s left)");
+                _eventBus.Publish(new ShowToastRequest($"Scout on cooldown ({_scoutCooldown:F1}s left)", 2f));
                 return;
             }
 
@@ -74,7 +82,7 @@ namespace ConvoyManager.World
 
             if (!IsAdjacentToDiscovered(targetHex.Index))
             {
-                Debug.Log("Target hex must be adjacent to discovered territory");
+                _eventBus.Publish(new ShowToastRequest("Target hex must be adjacent to discovered territory", 2f));
                 return;
             }
 
