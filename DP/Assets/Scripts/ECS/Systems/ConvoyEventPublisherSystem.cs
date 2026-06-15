@@ -5,8 +5,8 @@ using ConvoyManager.Core;
 namespace ConvoyManager.ECS
 {
     /// <summary>
-    /// Обрабатывает теги событий, добавленные другими системами, и публикует их через EventBus.
-    /// Не содержит Burst, так как работает со ссылочным EventBus.
+    /// пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ, пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ, пїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅ пїЅпїЅпїЅпїЅпїЅ EventBus.
+    /// пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ Burst, пїЅпїЅпїЅ пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ EventBus.
     /// </summary>
     [UpdateAfter(typeof(ConvoyMovementSystem))]
     [UpdateAfter(typeof(ConvoyResourceSystem))]
@@ -26,6 +26,13 @@ namespace ConvoyManager.ECS
                 {
                     EventBus.Publish(new ConvoyArrivedEvent(entity));
                     ecb.RemoveComponent<ConvoyArrivedTag>(entity);
+                }).WithoutBurst().Run();
+            Entities
+                .WithAll<ConvoyArrivedAtCityTag, ConvoyTag>()
+                .ForEach((Entity entity) =>
+                {
+                    EventBus.Publish(new ConvoyArrivedAtCityEvent(entity));
+                    ecb.RemoveComponent<ConvoyArrivedAtCityTag>(entity);
                 }).WithoutBurst().Run();
             Entities
                 .WithAll<OutOfFoodTag, ConvoyTag>()

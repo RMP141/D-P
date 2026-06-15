@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using ConvoyManager.Combat;
 using ConvoyManager.ECS;
@@ -30,7 +31,9 @@ namespace ConvoyManager.Travel
             foreach (int cityIdx in cityIndices)
                 _ = _worldState.GetCity(cityIdx);
 
-            // Validate path between consecutive cities using HexPathfinder
+            // Compute and store the full hex path between consecutive cities
+            var allSegments = new List<List<int>>();
+            int totalPathLength = 0;
             for (int i = 0; i < cityIndices.Length - 1; i++)
             {
                 int fromHex = _worldState.GetCity(cityIndices[i]).HexIndex;
@@ -39,6 +42,14 @@ namespace ConvoyManager.Travel
                 if (path == null)
                     throw new InvalidOperationException(
                         $"No valid path between {_worldState.GetCity(cityIndices[i]).Name} and {_worldState.GetCity(cityIndices[i + 1]).Name} (water blocks the way)");
+
+                // Remove the first hex (it's the same as the last hex of previous segment)
+                // Keep the start city hex for the first segment, remove duplicates for subsequent
+                if (i > 0 && path.Count > 0)
+                    path.RemoveAt(0);
+
+                allSegments.Add(path);
+                totalPathLength += path.Count;
             }
 
             var entity = _entityManager.CreateEntity(
@@ -56,16 +67,38 @@ namespace ConvoyManager.Travel
                 baseSpeed += 5f;
             _entityManager.SetComponentData(entity, new MovementSpeed { Value = baseSpeed });
             _entityManager.SetComponentData(entity, new ResourceComponent { Food = 100f, Wear = 0f });
-            _entityManager.SetComponentData(entity, new ConvoyStateComponent { State = ConvoyState.Traveling, Progress = 0f });
+            _entityManager.SetComponentData(entity, new ConvoyStateComponent { State = ConvoyState.Traveling, Progress = 0f, CurrentHexIndex = 0 });
             _entityManager.SetComponentData(entity, new EventTimerComponent { TimeUntilCheck = 60f });
 
-            // ���������� Blob-������ ��������
+            // Store route as Blob with full hex path
             using (var blobBuilder = new BlobBuilder(Allocator.Temp))
             {
                 ref var routeBlob = ref blobBuilder.ConstructRoot<RouteBlob>();
+
                 var citiesArray = blobBuilder.Allocate(ref routeBlob.CityIndices, cityIndices.Length);
                 for (int i = 0; i < cityIndices.Length; i++)
                     citiesArray[i] = cityIndices[i];
+
+                var hexPathArr = blobBuilder.Allocate(ref routeBlob.HexPath, totalPathLength);
+                var speedArr = blobBuilder.Allocate(ref routeBlob.HexTerrainSpeeds, totalPathLength);
+                var waypointsArr = blobBuilder.Allocate(ref routeBlob.CityWaypoints, cityIndices.Length);
+
+                int idx = 0;
+                int segIdx = 0;
+                int waypointAccum = 0;
+                foreach (var seg in allSegments)
+                {
+                    foreach (int hi in seg)
+                    {
+                        hexPathArr[idx] = hi;
+                        speedArr[idx] = TerrainCost.GetSpeedMultiplier(_worldState.GetHex(hi).Terrain);
+                        idx++;
+                    }
+                    waypointAccum += seg.Count;
+                    waypointsArr[segIdx] = waypointAccum - 1;
+                    segIdx++;
+                }
+
                 routeBlob.CurrentSegment = 0;
                 _entityManager.SetComponentData(entity, new RouteComponent
                 {

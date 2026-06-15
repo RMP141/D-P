@@ -16,6 +16,8 @@ namespace ConvoyManager.Player
         bool SpendGold(int amount);
         void AddMercenaries(int count);
         void RemoveMercenaries(int count);
+        void AddCarts(int count);
+        void RemoveCarts(int count);
         void AddItem(int itemId, int quantity);
         void RemoveItem(int itemId, int quantity);
         void ChangeReputation(Faction faction, int delta);

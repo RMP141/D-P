@@ -1,3 +1,4 @@
+using ConvoyManager.Combat;
 using ConvoyManager.Core;
 using ConvoyManager.Data;
 using ConvoyManager.ECS;
@@ -20,6 +21,7 @@ namespace ConvoyManager.UI
         private readonly EventBus _eventBus;
         private readonly IPlayerProgress _playerProgress;
         private readonly IEconomyEngine _economyEngine;
+        private readonly ICartManager _cartManager;
         private readonly EntityManager _entityManager;
 
         private VisualElement _root;
@@ -30,13 +32,14 @@ namespace ConvoyManager.UI
         private Dictionary<int, IntegerField> _cargoQtyFields = new Dictionary<int, IntegerField>();
         private EntityQuery _convoyQuery;
 
-        public RoutePlannerScreen(IWorldState worldState, IRoutePlanner routePlanner, EventBus eventBus, IPlayerProgress playerProgress, IEconomyEngine economyEngine, EntityManager entityManager)
+        public RoutePlannerScreen(IWorldState worldState, IRoutePlanner routePlanner, EventBus eventBus, IPlayerProgress playerProgress, IEconomyEngine economyEngine, ICartManager cartManager, EntityManager entityManager)
         {
             _worldState = worldState;
             _routePlanner = routePlanner;
             _eventBus = eventBus;
             _playerProgress = playerProgress;
             _economyEngine = economyEngine;
+            _cartManager = cartManager;
             _entityManager = entityManager;
         }
 
@@ -174,7 +177,7 @@ namespace ConvoyManager.UI
             int convoyCount = _convoyQuery.CalculateEntityCount();
             if (convoyCount >= _playerProgress.MaxConvoys)
             {
-                Debug.LogWarning($"[RoutePlanner] Max convoys reached ({_playerProgress.MaxConvoys})");
+                _eventBus.Publish(new ShowToastRequest("Convoy is still en route — wait for its return!", 3f));
                 return;
             }
 
@@ -214,8 +217,19 @@ namespace ConvoyManager.UI
                 }
             }
 
+            if (_cartManager.AvailableCarts <= 0)
+            {
+                _eventBus.Publish(new ShowToastRequest("Buy a cart first!", 3f));
+                return;
+            }
+
             try
             {
+                if (!_cartManager.UseCart())
+                {
+                    _eventBus.Publish(new ShowToastRequest("Failed to use cart!", 3f));
+                    return;
+                }
                 var entity = _routePlanner.CreateConvoy(selectedIndices.ToArray(), cargoItems.ToArray());
                 _eventBus.Publish(new ConvoyCreatedEvent(entity));
                 Hide();

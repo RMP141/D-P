@@ -21,6 +21,12 @@ namespace ConvoyManager.Core
         public ConvoyArrivedEvent(Entity entity) => ConvoyEntity = entity;
     }
 
+    public readonly struct ConvoyArrivedAtCityEvent
+    {
+        public readonly Entity ConvoyEntity;
+        public ConvoyArrivedAtCityEvent(Entity entity) => ConvoyEntity = entity;
+    }
+
     public readonly struct OutOfFoodEvent
     {
         public readonly Entity ConvoyEntity;

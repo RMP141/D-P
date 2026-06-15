@@ -20,7 +20,7 @@ namespace ConvoyManager.Data
         [Header("Layout")]
         public GridLayout.CellLayout CellLayout = GridLayout.CellLayout.Hexagon;
         public GridLayout.CellSwizzle CellSwizzle = GridLayout.CellSwizzle.XYZ;
-        public Vector3 CellSize = new Vector3(0.865f, 1, 0);
+        public Vector3 CellSize = new Vector3(1f, 1.3f, 0);
 
         [Header("Generation")]
         public float NoiseScale = 0.08f;

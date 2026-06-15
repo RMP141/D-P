@@ -4,8 +4,7 @@ using ConvoyManager.World;
 namespace ConvoyManager.Utils
 {
     /// <summary>
-    /// A* pathfinder on the hex grid that avoids water.
-    /// < grid width/height hardcoded to 30 to match WorldState.
+    /// A* pathfinder on the hex grid that avoids water and respects terrain costs.
     /// </summary>
     public static class HexPathfinder
     {
@@ -14,17 +13,18 @@ namespace ConvoyManager.Utils
 
         /// <summary>
         /// Find a path of hex indices from startHexIndex to endHexIndex avoiding water.
+        /// Uses terrain movement costs (Plains=1, Forest=1.5, Mountains=3).
         /// Returns null if no path exists.
         /// </summary>
         public static List<int> FindPath(IWorldState world, int startHexIndex, int endHexIndex)
         {
-            var openSet = new List<(int index, int fCost)>();
+            var openSet = new List<(int index, float fCost)>();
             var cameFrom = new Dictionary<int, int>();
-            var gCosts = new Dictionary<int, int>();
+            var gCosts = new Dictionary<int, float>();
             var closedSet = new HashSet<int>();
 
             gCosts[startHexIndex] = 0;
-            int startH = HexDistance(world, startHexIndex, endHexIndex);
+            float startH = HexDistance(world, startHexIndex, endHexIndex);
             openSet.Add((startHexIndex, startH));
 
             while (openSet.Count > 0)
@@ -43,17 +43,18 @@ namespace ConvoyManager.Utils
                     if (closedSet.Contains(neighbor))
                         continue;
 
-                    if (world.GetHex(neighbor).Terrain == HexType.Water)
+                    float terrainCost = TerrainCost.GetCost(world.GetHex(neighbor).Terrain);
+                    if (terrainCost < 0)
                         continue;
 
-                    int tentativeG = gCosts[current.index] + 1;
+                    float tentativeG = gCosts[current.index] + terrainCost;
 
                     if (!gCosts.ContainsKey(neighbor) || tentativeG < gCosts[neighbor])
                     {
                         cameFrom[neighbor] = current.index;
                         gCosts[neighbor] = tentativeG;
-                        int h = HexDistance(world, neighbor, endHexIndex);
-                        int f = tentativeG + h;
+                        float h = HexDistance(world, neighbor, endHexIndex);
+                        float f = tentativeG + h;
 
                         int existingIdx = openSet.FindIndex(x => x.index == neighbor);
                         if (existingIdx >= 0)
@@ -72,7 +73,7 @@ namespace ConvoyManager.Utils
             return x * GridHeight + y;
         }
 
-        private static int HexDistance(IWorldState world, int a, int b)
+        private static float HexDistance(IWorldState world, int a, int b)
         {
             return MathUtils.HexDistance(
                 world.GetHex(a).Coordinates,
@@ -86,7 +87,6 @@ namespace ConvoyManager.Utils
             int y = hex.Coordinates.y;
             bool oddRow = (y & 1) == 1;
 
-            // Pointy-top odd-r offsets
             int[][] offsetsEven = new int[][]
             {
                 new int[] { -1, 0 }, new int[] { 1, 0 },

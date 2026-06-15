@@ -13,7 +13,7 @@ namespace ConvoyManager.ECS
         public void OnCreate(ref SystemState state)
         {
             _query = SystemAPI.QueryBuilder()
-                .WithAll<ConvoyTag, ConvoyStateComponent, MovementSpeed>()
+                .WithAll<ConvoyTag, ConvoyStateComponent, MovementSpeed, RouteComponent>()
                 .Build();
             state.RequireForUpdate(_query);
         }
@@ -40,16 +40,48 @@ namespace ConvoyManager.ECS
             public float DeltaTime;
             public EntityCommandBuffer.ParallelWriter ECB;
 
-            void Execute([EntityIndexInChunk] int chunkIndex, Entity entity, ref ConvoyStateComponent stateComp, in MovementSpeed speed)
+            void Execute([EntityIndexInChunk] int chunkIndex, Entity entity,
+                ref ConvoyStateComponent stateComp, in MovementSpeed speed, in RouteComponent route)
             {
                 if (stateComp.State != ConvoyState.Traveling) return;
+                if (!route.Blob.IsCreated) return;
 
-                stateComp.Progress += speed.Value * DeltaTime;
+                ref var blob = ref route.Blob.Value;
+                if (blob.HexPath.Length < 2) return;
+
+                // If at the last hex in path, route complete
+                if (stateComp.CurrentHexIndex >= blob.HexPath.Length - 1)
+                {
+                    stateComp.State = ConvoyState.WaitingForInput;
+                    stateComp.Progress = 0f;
+                    ECB.AddComponent<ConvoyArrivedTag>(chunkIndex, entity);
+                    return;
+                }
+
+                // Terrain-aware movement: speed * terrainMultiplier * deltaTime
+                float terrainSpeed = blob.HexTerrainSpeeds.Length > stateComp.CurrentHexIndex
+                    ? blob.HexTerrainSpeeds[stateComp.CurrentHexIndex]
+                    : 1f;
+
+                stateComp.Progress += speed.Value * terrainSpeed * DeltaTime;
+
                 if (stateComp.Progress >= 1f)
                 {
                     stateComp.Progress = 0f;
-                    stateComp.State = ConvoyState.WaitingForInput;
-                    ECB.AddComponent<ConvoyArrivedTag>(chunkIndex, entity);
+                    stateComp.CurrentHexIndex++;
+
+                    // Check if the new hex is a city waypoint
+                    for (int i = 0; i < blob.CityWaypoints.Length; i++)
+                    {
+                        if (blob.CityWaypoints[i] == stateComp.CurrentHexIndex)
+                        {
+                            stateComp.State = ConvoyState.WaitingForInput;
+                            ECB.AddComponent<ConvoyArrivedAtCityTag>(chunkIndex, entity);
+                            if (i == blob.CityWaypoints.Length - 1)
+                                ECB.AddComponent<ConvoyArrivedTag>(chunkIndex, entity);
+                            return;
+                        }
+                    }
                 }
             }
         }

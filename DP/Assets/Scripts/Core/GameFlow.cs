@@ -36,6 +36,7 @@ namespace ConvoyManager.Core
         private readonly CaptainHireScreen _captainHireScreen;
         private readonly ICaptainCollection _captainCollection;
         private readonly IMercenaryManager _mercManager;
+        private readonly ICartManager _cartManager;
         private readonly ICombatStrategy _combatCalculator;
         private readonly ConfirmDialog _confirmDialog;
         private UIDocument _uiDocument;
@@ -76,6 +77,7 @@ namespace ConvoyManager.Core
             CaptainHireScreen captainHireScreen,
             ICaptainCollection captainCollection,
             IMercenaryManager mercManager,
+            ICartManager cartManager,
             ICombatStrategy combatCalculator,
             ConfirmDialog confirmDialog,
             EventBus eventBus,
@@ -96,6 +98,7 @@ namespace ConvoyManager.Core
             _captainHireScreen = captainHireScreen;
             _captainCollection = captainCollection;
             _mercManager = mercManager;
+            _cartManager = cartManager;
             _combatCalculator = combatCalculator;
             _confirmDialog = confirmDialog;
             _eventBus = eventBus;
@@ -124,6 +127,7 @@ namespace ConvoyManager.Core
             _saveLoadSelect.OnMainMenuClicked += OnSaveLoadMainMenu;
 
             _eventBus.Subscribe<ConvoyArrivedEvent>().Subscribe(OnConvoyArrived).AddTo(_disposables);
+            _eventBus.Subscribe<ConvoyArrivedAtCityEvent>().Subscribe(OnConvoyArrivedAtCity).AddTo(_disposables);
             _eventBus.Subscribe<ConvoyCreatedEvent>().Subscribe(OnConvoyCreated).AddTo(_disposables);
             _eventBus.Subscribe<EventTriggeredMessage>().Subscribe(msg => { HideAllOverlays(); _eventResolverUI.Show(msg); SetMapInteraction(false); }).AddTo(_disposables);
             _eventBus.Subscribe<CombatResolvedEvent>().Subscribe(evt => ShowToast(evt.Result == CombatResult.Victory ? "Combat victory! +30 gold" : "Combat defeat...")).AddTo(_disposables);
@@ -487,6 +491,7 @@ namespace ConvoyManager.Core
 
         private void OnConvoyArrived(ConvoyArrivedEvent evt)
         {
+            // Route complete — final city reached, convoy is done
             var world = _ecsWorld;
             if (world == null || !world.IsCreated) return;
             var em = world.EntityManager;
@@ -497,59 +502,80 @@ namespace ConvoyManager.Core
                 _cleanupSystem?.PendingDestroy.Enqueue(evt.ConvoyEntity);
                 return;
             }
+
+            // Find the arrival city from the last waypoint
             ref var routeBlob = ref route.Blob.Value;
-            int arrivalCityIdx = routeBlob.CityIndices[routeBlob.CurrentSegment + 1];
+            int cityIdx = routeBlob.CityIndices[routeBlob.CityIndices.Length - 1];
+            var arrivalCity = _worldState.GetCity(cityIdx);
+
+            UnloadConvoyCargo(em, evt.ConvoyEntity, arrivalCity);
+
+            _convoyCount = System.Math.Max(0, _convoyCount - 1);
+            _cartManager.ReturnCart();
+            UpdateHUD();
+            Debug.Log($"[Convoy] Route complete at {arrivalCity.Name}");
+            _cleanupSystem?.PendingDestroy.Enqueue(evt.ConvoyEntity);
+        }
+
+        private void OnConvoyArrivedAtCity(ConvoyArrivedAtCityEvent evt)
+        {
+            // Mid-route stop — unload cargo and resume
+            var world = _ecsWorld;
+            if (world == null || !world.IsCreated) return;
+            var em = world.EntityManager;
+
+            var route = em.GetComponentData<RouteComponent>(evt.ConvoyEntity);
+            if (!route.Blob.IsCreated) return;
+
+            ref var routeBlob = ref route.Blob.Value;
+            var state = em.GetComponentData<ConvoyStateComponent>(evt.ConvoyEntity);
+
+            // Find which city waypoint the convoy is at
+            int cityWaypointIdx = -1;
+            for (int i = 0; i < routeBlob.CityWaypoints.Length; i++)
+            {
+                if (routeBlob.CityWaypoints[i] == state.CurrentHexIndex)
+                {
+                    cityWaypointIdx = i;
+                    break;
+                }
+            }
+            if (cityWaypointIdx < 0) return;
+
+            int arrivalCityIdx = routeBlob.CityIndices[cityWaypointIdx];
             var arrivalCity = _worldState.GetCity(arrivalCityIdx);
 
-            var cargo = default(CargoComponent);
-            bool hasCargo = em.HasComponent<CargoComponent>(evt.ConvoyEntity);
-            if (hasCargo)
-                cargo = em.GetComponentData<CargoComponent>(evt.ConvoyEntity);
-            if (hasCargo && cargo.Blob.IsCreated)
-            {
-                ref var cargoBlob = ref cargo.Blob.Value;
-                string itemSummary = "";
-                for (int i = 0; i < cargoBlob.Items.Length; i++)
-                {
-                    var item = cargoBlob.Items[i];
-                    arrivalCity.AddToPlayerCache(item.ItemId, item.Quantity);
-                    string itemName = "Item#" + item.ItemId;
-                    var itemDef = _economyEngine.AllItems.FirstOrDefault(d => d.ID == item.ItemId);
-                    if (itemDef != null) itemName = itemDef.Name;
-                    if (i > 0) itemSummary += ", ";
-                    itemSummary += itemName + " x" + item.Quantity;
-                }
-                string toastMsg = $"Convoy arrived at {arrivalCity.Name}\nReceived: {itemSummary}";
-                ShowToast(toastMsg);
-                cargo.Blob.Dispose();
-                em.SetComponentData(evt.ConvoyEntity, new CargoComponent { Blob = default });
-                UpdateHUD();
-            }
+            UnloadConvoyCargo(em, evt.ConvoyEntity, arrivalCity);
 
-            if (routeBlob.CurrentSegment < routeBlob.CityIndices.Length - 2)
+            // Resume traveling toward next city
+            state.State = ConvoyState.Traveling;
+            state.Progress = 0f;
+            em.SetComponentData(evt.ConvoyEntity, state);
+        }
+
+        private void UnloadConvoyCargo(EntityManager em, Entity convoyEntity, City arrivalCity)
+        {
+            if (!em.HasComponent<CargoComponent>(convoyEntity)) return;
+            var cargo = em.GetComponentData<CargoComponent>(convoyEntity);
+            if (!cargo.Blob.IsCreated) return;
+
+            ref var cargoBlob = ref cargo.Blob.Value;
+            string itemSummary = "";
+            for (int i = 0; i < cargoBlob.Items.Length; i++)
             {
-                int newSegment = routeBlob.CurrentSegment + 1;
-                using (var blobBuilder = new BlobBuilder(Unity.Collections.Allocator.Temp))
-                {
-                    ref var newRoute = ref blobBuilder.ConstructRoot<RouteBlob>();
-                    var arr = blobBuilder.Allocate(ref newRoute.CityIndices, routeBlob.CityIndices.Length);
-                    for (int i = 0; i < routeBlob.CityIndices.Length; i++)
-                        arr[i] = routeBlob.CityIndices[i];
-                    newRoute.CurrentSegment = newSegment;
-                    route.Blob.Dispose();
-                    route.Blob = blobBuilder.CreateBlobAssetReference<RouteBlob>(Unity.Collections.Allocator.Persistent);
-                    em.SetComponentData(evt.ConvoyEntity, route);
-                }
-                em.SetComponentData(evt.ConvoyEntity, new ConvoyStateComponent { State = ConvoyState.Traveling, Progress = 0f });
-                Debug.Log($"[Convoy] Continuing to next city (segment {newSegment})");
+                var item = cargoBlob.Items[i];
+                arrivalCity.AddToPlayerCache(item.ItemId, item.Quantity);
+                string itemName = "Item#" + item.ItemId;
+                var itemDef = _economyEngine.AllItems.FirstOrDefault(d => d.ID == item.ItemId);
+                if (itemDef != null) itemName = itemDef.Name;
+                if (i > 0) itemSummary += ", ";
+                itemSummary += itemName + " x" + item.Quantity;
             }
-            else
-            {
-                _convoyCount = System.Math.Max(0, _convoyCount - 1);
-                UpdateHUD();
-                Debug.Log($"[Convoy] Route complete at {arrivalCity.Name}");
-                _cleanupSystem?.PendingDestroy.Enqueue(evt.ConvoyEntity);
-            }
+            string toastMsg = $"Convoy arrived at {arrivalCity.Name}\nReceived: {itemSummary}";
+            ShowToast(toastMsg);
+            cargo.Blob.Dispose();
+            em.SetComponentData(convoyEntity, new CargoComponent { Blob = default });
+            UpdateHUD();
         }
 
         private void CreateToolbar()
@@ -628,6 +654,34 @@ namespace ConvoyManager.Core
             fireBtn.style.color = Color.white;
             fireBtn.style.fontSize = 11;
             _toolbar.Add(fireBtn);
+
+            var cartLabel = new Label($"Carts: {_cartManager.AvailableCarts}");
+            cartLabel.name = "cart-label";
+            cartLabel.style.width = 80;
+            cartLabel.style.color = Color.white;
+            cartLabel.style.height = 30;
+            _toolbar.Add(cartLabel);
+
+            var buyCartBtn = new Button(() =>
+            {
+                if (_cartManager.BuyCart())
+                {
+                    ShowToast("Bought a cart! -100 gold");
+                    UpdateHUD();
+                }
+                else
+                {
+                    ShowToast("Cannot buy cart: not enough gold or at max carts");
+                }
+            });
+            buyCartBtn.text = "Buy Cart";
+            buyCartBtn.style.width = 80;
+            buyCartBtn.style.height = 30;
+            buyCartBtn.style.marginLeft = 3;
+            buyCartBtn.style.backgroundColor = new Color(0.2f, 0.3f, 0.5f);
+            buyCartBtn.style.color = Color.white;
+            buyCartBtn.style.fontSize = 11;
+            _toolbar.Add(buyCartBtn);
 
             _convoyLabel = new Label($"Convoys: {_convoyCount}");
             _convoyLabel.style.width = 100;
@@ -772,6 +826,8 @@ namespace ConvoyManager.Core
             if (_goldLabel != null) _goldLabel.text = $"Gold: {_playerProgress.Gold}";
             if (_mercLabel != null) _mercLabel.text = $"Mercs: {_playerProgress.MercenaryCount}";
             if (_convoyLabel != null) _convoyLabel.text = $"Convoys: {_convoyCount}";
+            var cartLabel = _toolbar?.Q<Label>("cart-label");
+            if (cartLabel != null) cartLabel.text = $"Carts: {_cartManager.AvailableCarts}";
         }
 
         private void ConfigureECSSystems()

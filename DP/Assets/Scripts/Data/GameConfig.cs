@@ -9,7 +9,7 @@ namespace ConvoyManager.Data
         public int StartGold = 1000;
         public int StartCarts = 1;
         public int StartMercenaries = 2;
-        public int MaxConvoys = 1;
+        public int MaxConvoys = 3;
         public int MaxCarts = 10;
         public int MaxMercenaries = 50;
 

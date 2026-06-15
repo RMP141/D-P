@@ -8,8 +8,8 @@ namespace ConvoyManager.Player
     {
         public int Gold { get; private set; } = 1000;
         public int MercenaryCount { get; private set; } = 2;
-        public int CartCount { get; private set; } = 1;
-        public int MaxConvoys { get; private set; } = 1;
+        public int CartCount { get; private set; } = 0;
+        public int MaxConvoys { get; private set; } = 3;
 
         public Dictionary<Faction, int> Reputation { get; private set; } = new Dictionary<Faction, int>();
         public Dictionary<int, int> Inventory { get; private set; } = new Dictionary<int, int>();
@@ -34,6 +34,16 @@ namespace ConvoyManager.Player
         public void RemoveMercenaries(int count)
         {
             MercenaryCount = Mathf.Max(MercenaryCount - count, 0);
+        }
+
+        public void AddCarts(int count)
+        {
+            CartCount += count;
+        }
+
+        public void RemoveCarts(int count)
+        {
+            CartCount = Mathf.Max(CartCount - count, 0);
         }
 
         public void AddItem(int itemId, int quantity)
@@ -66,7 +76,7 @@ namespace ConvoyManager.Player
         public void SetMaxConvoys(int count) => MaxConvoys = count;
 
         /// <summary>
-        /// Восстанавливает состояние прогресса из сохранения.
+        /// пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ.
         /// </summary>
         public void Restore(int gold, int mercenaryCount, int cartCount, int maxConvoys,
             Dictionary<Faction, int> reputation, Dictionary<int, int> inventory)

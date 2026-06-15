@@ -38,6 +38,7 @@ namespace ConvoyManager.ECS
                     var state = _entityManager.GetComponentData<ConvoyStateComponent>(entity);
                     entry.State = state.State;
                     entry.Progress = state.Progress;
+                    entry.CurrentHexIndex = state.CurrentHexIndex;
                 }
                 if (_entityManager.HasComponent<ResourceComponent>(entity))
                 {
@@ -75,6 +76,9 @@ namespace ConvoyManager.ECS
                         ref var route = ref routeComp.Blob.Value;
                         entry.RouteCityIndices = route.CityIndices.ToArray();
                         entry.CurrentSegment = route.CurrentSegment;
+                        entry.HexPath = route.HexPath.ToArray();
+                        entry.HexTerrainSpeeds = route.HexTerrainSpeeds.ToArray();
+                        entry.CityWaypoints = route.CityWaypoints.ToArray();
                     }
                 }
 
@@ -114,10 +118,15 @@ namespace ConvoyManager.ECS
                 var entity = _entityManager.CreateEntity(compTypes.ToArray());
 
                 _entityManager.SetComponentData(entity, new MovementSpeed { Value = entry.Speed });
+                // Legacy save? Use CurrentSegment to derive starting hex index
+                int restoredHexIndex = entry.HexPath != null && entry.HexPath.Length > 0
+                    ? entry.CurrentHexIndex
+                    : entry.CurrentSegment;
                 _entityManager.SetComponentData(entity, new ConvoyStateComponent
                 {
                     State = entry.State,
-                    Progress = entry.Progress
+                    Progress = entry.Progress,
+                    CurrentHexIndex = restoredHexIndex
                 });
                 _entityManager.SetComponentData(entity, new ResourceComponent
                 {
@@ -150,11 +159,57 @@ namespace ConvoyManager.ECS
 
                 if (hasRoute)
                 {
+                    bool isLegacy = entry.HexPath == null || entry.HexPath.Length == 0;
+                    int hexPathLen = isLegacy ? entry.RouteCityIndices.Length : entry.HexPath.Length;
+
                     using var blobBuilder = new BlobBuilder(Allocator.Temp);
                     ref var routeBlob = ref blobBuilder.ConstructRoot<RouteBlob>();
                     var cities = blobBuilder.Allocate(ref routeBlob.CityIndices, entry.RouteCityIndices.Length);
                     for (int i = 0; i < entry.RouteCityIndices.Length; i++)
                         cities[i] = entry.RouteCityIndices[i];
+
+                    var hexArr = blobBuilder.Allocate(ref routeBlob.HexPath, hexPathLen);
+                    var speedArr = blobBuilder.Allocate(ref routeBlob.HexTerrainSpeeds, hexPathLen);
+                    if (isLegacy)
+                    {
+                        // Legacy save: path = cities only (no intermediate hexes)
+                        for (int i = 0; i < hexPathLen; i++)
+                        {
+                            hexArr[i] = i; // dummy hex index
+                            speedArr[i] = 1f;
+                        }
+                    }
+                    else
+                    {
+                        for (int i = 0; i < hexPathLen; i++)
+                        {
+                            hexArr[i] = entry.HexPath[i];
+                            speedArr[i] = entry.HexTerrainSpeeds != null && i < entry.HexTerrainSpeeds.Length
+                                ? entry.HexTerrainSpeeds[i] : 1f;
+                        }
+                    }
+
+                    int wpLen = isLegacy ? entry.RouteCityIndices.Length
+                        : (entry.CityWaypoints != null && entry.CityWaypoints.Length > 0
+                            ? entry.CityWaypoints.Length : entry.RouteCityIndices.Length);
+                    var wpArr = blobBuilder.Allocate(ref routeBlob.CityWaypoints, wpLen);
+                    if (isLegacy)
+                    {
+                        // Legacy: each city index is its own waypoint
+                        for (int i = 0; i < wpLen; i++)
+                            wpArr[i] = i;
+                    }
+                    else if (entry.CityWaypoints != null && entry.CityWaypoints.Length > 0)
+                    {
+                        for (int i = 0; i < wpLen; i++)
+                            wpArr[i] = entry.CityWaypoints[i];
+                    }
+                    else
+                    {
+                        for (int i = 0; i < wpLen; i++)
+                            wpArr[i] = i * (hexPathLen / wpLen);
+                    }
+
                     routeBlob.CurrentSegment = entry.CurrentSegment;
 
                     _entityManager.SetComponentData(entity, new RouteComponent
@@ -184,11 +239,15 @@ namespace ConvoyManager.ECS
         public float Speed;
         public ConvoyState State;
         public float Progress;
+        public int CurrentHexIndex;
         public float Food;
         public float Wear;
         public float TimeUntilCheck;
         public CargoItemSerialized[] Cargo;
         public int[] RouteCityIndices;
+        public int[] HexPath;
+        public float[] HexTerrainSpeeds;
+        public int[] CityWaypoints;
         public int CurrentSegment;
     }
 

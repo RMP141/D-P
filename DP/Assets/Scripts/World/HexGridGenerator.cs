@@ -29,7 +29,7 @@ namespace ConvoyManager.World
         {
             _grid.cellLayout = GridLayout.CellLayout.Hexagon;
             _grid.cellSwizzle = GridLayout.CellSwizzle.XYZ;
-            _grid.cellSize = new Vector3(0.865f, 1, 0);
+            _grid.cellSize = new Vector3(1f, 1.3f, 0);
         }
 
         private void Start()

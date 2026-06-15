@@ -41,6 +41,7 @@ namespace ConvoyManager.Core
 
             // Combat
             builder.Register<IMercenaryManager, MercenaryManager>(Lifetime.Singleton);
+            builder.Register<ICartManager, CartManager>(Lifetime.Singleton);
             builder.Register<ICaptainCollection, CaptainCollection>(Lifetime.Singleton);
             builder.Register<CaptainGacha>(Lifetime.Singleton);
             builder.Register<ICombatStrategy, DefaultCombatCalculator>(Lifetime.Singleton);

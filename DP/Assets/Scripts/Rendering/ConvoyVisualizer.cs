@@ -66,17 +66,20 @@ namespace ConvoyManager.Rendering
             if (!route.Blob.IsCreated) return float3.zero;
 
             ref var routeBlob = ref route.Blob.Value;
-            if (routeBlob.CityIndices.Length < 2) return float3.zero;
+            if (routeBlob.HexPath.Length < 2) return float3.zero;
 
-            int seg = routeBlob.CurrentSegment;
-            if (seg < 0 || seg + 1 >= routeBlob.CityIndices.Length) return float3.zero;
-            int cityA = routeBlob.CityIndices[seg];
-            int cityB = routeBlob.CityIndices[seg + 1];
+            int idx = state.CurrentHexIndex;
+            if (idx < 0 || idx >= routeBlob.HexPath.Length - 1)
+            {
+                // At end of path, show at last hex position
+                var lastHex = _worldState.GetHex(routeBlob.HexPath[^1]);
+                return lastHex.WorldPosition;
+            }
 
-            var hexA = _worldState.GetHex(_worldState.GetCity(cityA).HexIndex);
-            var hexB = _worldState.GetHex(_worldState.GetCity(cityB).HexIndex);
+            var currentHex = _worldState.GetHex(routeBlob.HexPath[idx]);
+            var nextHex = _worldState.GetHex(routeBlob.HexPath[idx + 1]);
 
-            return math.lerp(hexA.WorldPosition, hexB.WorldPosition, state.Progress);
+            return math.lerp(currentHex.WorldPosition, nextHex.WorldPosition, state.Progress);
         }
 
         private void ResizeVisuals(int count)
