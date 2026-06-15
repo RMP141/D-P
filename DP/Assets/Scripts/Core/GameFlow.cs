@@ -8,6 +8,7 @@ using ConvoyManager.Events;
 using ConvoyManager.Player;
 using ConvoyManager.Rendering;
 using ConvoyManager.UI;
+using ConvoyManager.Utils;
 using ConvoyManager.World;
 using UniRx;
 using Unity.Entities;
@@ -15,7 +16,6 @@ using UnityEngine;
 using VContainer.Unity;
 using Random = UnityEngine.Random;
 using UnityEngine.UIElements;
-using ConvoyManager.Core;
 
 namespace ConvoyManager.Core
 {
@@ -35,6 +35,8 @@ namespace ConvoyManager.Core
         private readonly SaveLoadSelectScreen _saveLoadSelect;
         private readonly CaptainHireScreen _captainHireScreen;
         private readonly ICaptainCollection _captainCollection;
+        private readonly IMercenaryManager _mercManager;
+        private readonly ICombatStrategy _combatCalculator;
         private readonly ConfirmDialog _confirmDialog;
         private UIDocument _uiDocument;
         private readonly EventBus _eventBus;
@@ -42,13 +44,21 @@ namespace ConvoyManager.Core
         private readonly CompositeDisposable _disposables = new CompositeDisposable();
         private VisualElement _toolbar;
         private HexClickHandler _hexClickHandler;
+        private CameraPan _cameraPan;
         private Unity.Entities.World _ecsWorld;
+        private ConvoyCleanupSystem _cleanupSystem;
         private bool _gameStarted;
         private bool _hasActiveSession;
         private Label _goldLabel;
         private Label _mercLabel;
         private Label _convoyLabel;
         private int _convoyCount;
+        private VisualElement _legendPanel;
+        private Label _toastLabel;
+        private IDisposable _toastTimer;
+        private bool _firstConvoyHandled;
+        private VisualElement _battleOverlay;
+        private Entity _battleConvoyEntity;
 
         public GameFlow(
             ISaveSystem saveSystem,
@@ -65,6 +75,8 @@ namespace ConvoyManager.Core
             SaveLoadSelectScreen saveLoadSelect,
             CaptainHireScreen captainHireScreen,
             ICaptainCollection captainCollection,
+            IMercenaryManager mercManager,
+            ICombatStrategy combatCalculator,
             ConfirmDialog confirmDialog,
             EventBus eventBus,
             GameConfig config)
@@ -83,6 +95,8 @@ namespace ConvoyManager.Core
             _saveLoadSelect = saveLoadSelect;
             _captainHireScreen = captainHireScreen;
             _captainCollection = captainCollection;
+            _mercManager = mercManager;
+            _combatCalculator = combatCalculator;
             _confirmDialog = confirmDialog;
             _eventBus = eventBus;
             _config = config;
@@ -110,8 +124,8 @@ namespace ConvoyManager.Core
             _saveLoadSelect.OnMainMenuClicked += OnSaveLoadMainMenu;
 
             _eventBus.Subscribe<ConvoyArrivedEvent>().Subscribe(OnConvoyArrived).AddTo(_disposables);
-            _eventBus.Subscribe<ConvoyCreatedEvent>().Subscribe(e => { _convoyCount++; UpdateHUD(); }).AddTo(_disposables);
-            _eventBus.Subscribe<EventTriggeredMessage>().Subscribe(msg => { HideAllOverlays(); _eventResolverUI.Show(msg); }).AddTo(_disposables);
+            _eventBus.Subscribe<ConvoyCreatedEvent>().Subscribe(OnConvoyCreated).AddTo(_disposables);
+            _eventBus.Subscribe<EventTriggeredMessage>().Subscribe(msg => { HideAllOverlays(); _eventResolverUI.Show(msg); SetMapInteraction(false); }).AddTo(_disposables);
             Observable.Interval(System.TimeSpan.FromSeconds(1)).Subscribe(_ => UpdateHUD()).AddTo(_disposables);
 
             _mainMenuScreen.OnNewGameClicked += StartGame;
@@ -159,6 +173,7 @@ namespace ConvoyManager.Core
                         _saveSystem.SaveGame(slot);
                         _saveLoadSelect.Hide();
                     }
+                    SetMapInteraction(true);
                 });
             }
             else
@@ -198,6 +213,19 @@ namespace ConvoyManager.Core
             });
         }
 
+        private void OnSaveLoadBack()
+        {
+            _saveLoadSelect.Hide();
+            if (!_gameStarted)
+                _uiManager.ShowScreen("MainMenu");
+        }
+
+        private void OnSaveLoadMainMenu()
+        {
+            _saveLoadSelect.Hide();
+            ShowMainMenu(hasActiveSession: _gameStarted);
+        }
+
         private void OnQuitClicked()
         {
             _confirmDialog.Show("Are you sure you want to quit?", confirmed =>
@@ -213,6 +241,27 @@ namespace ConvoyManager.Core
             });
         }
 
+        private void RefreshTilemap()
+        {
+            var grid = GameObject.Find("Grid");
+            if (grid == null) return;
+            var gen = grid.GetComponent<HexGridGenerator>();
+            if (gen != null)
+                gen.Redraw();
+        }
+
+        private void StartNewGame()
+        {
+            _firstConvoyHandled = false;
+            _convoyCount = 0;
+            int seed = Random.Range(0, int.MaxValue);
+            _worldState.Generate(seed);
+            _economyEngine.Initialize(_worldState);
+            _economicEventManager.Start();
+            _captainCollection.Clear();
+            _eventBus.Publish(new GameStartedEvent());
+        }
+
         private void ContinueGame()
         {
             if (!_hasActiveSession) return;
@@ -226,36 +275,189 @@ namespace ConvoyManager.Core
             _uiManager.HideCurrentScreen();
         }
 
-        private void OnSaveLoadBack()
+        private void OnConvoyCreated(ConvoyCreatedEvent evt)
         {
-            _saveLoadSelect.Hide();
-            if (!_gameStarted)
-                _uiManager.ShowScreen("MainMenu");
+            _convoyCount++;
+            UpdateHUD();
+
+            if (!_firstConvoyHandled)
+            {
+                _firstConvoyHandled = true;
+                ShowFirstConvoyBattle(evt.ConvoyEntity);
+            }
         }
 
-        private void OnSaveLoadMainMenu()
+        private void ShowFirstConvoyBattle(Entity convoyEntity)
         {
-            _saveLoadSelect.Hide();
-            ShowMainMenu(hasActiveSession: _gameStarted);
+            _battleConvoyEntity = convoyEntity;
+
+            var em = _ecsWorld.EntityManager;
+            if (em.HasComponent<ConvoyStateComponent>(convoyEntity))
+            {
+                em.SetComponentData(convoyEntity, new ConvoyStateComponent { State = ConvoyState.WaitingForInput, Progress = 0f });
+            }
+
+            var playerForceLabel = _battleOverlay.Q<Label>("BattlePlayerForceLabel");
+            if (playerForceLabel != null)
+                playerForceLabel.text = "Your forces: Mercenaries x" + _mercManager.MercenaryCount;
+
+            var resultLabel = _battleOverlay.Q<Label>("BattleResultLabel");
+            if (resultLabel != null) resultLabel.text = "";
+
+            _battleOverlay.Q<Button>("BattleEngageBtn").style.display = DisplayStyle.Flex;
+            _battleOverlay.Q<Button>("BattleDismissBtn").style.display = DisplayStyle.None;
+
+            SetECSPaused(true);
+
+            HideAllOverlays();
+            _battleOverlay.style.display = DisplayStyle.Flex;
         }
 
-        private void RefreshTilemap()
+        private void ResolveFirstConvoyBattle()
         {
-            var grid = GameObject.Find("Grid");
-            if (grid == null) return;
-            var gen = grid.GetComponent<HexGridGenerator>();
-            if (gen != null)
-                gen.Redraw();
+            int mercCount = _mercManager.MercenaryCount;
+            int captainBonus = _captainCollection.ActiveCaptain != null ? 5 : 0;
+            float enemyPower = 2.5f;
+
+            CombatResult result = _combatCalculator.Resolve(mercCount, captainBonus, enemyPower, new UnityRandomGenerator());
+
+            var resultLabel = _battleOverlay.Q<Label>("BattleResultLabel");
+
+            if (result == CombatResult.Victory)
+            {
+                resultLabel.text = "Victory! The bandits are defeated.\nYour convoy continues.";
+                _battleOverlay.Q<Button>("BattleEngageBtn").style.display = DisplayStyle.None;
+                _battleOverlay.Q<Button>("BattleDismissBtn").style.display = DisplayStyle.Flex;
+                _playerProgress.AddGold(30);
+            }
+            else
+            {
+                resultLabel.text = "Defeat... Your convoy was raided.\nYou lost some supplies.";
+                _battleOverlay.Q<Button>("BattleEngageBtn").style.display = DisplayStyle.None;
+                _battleOverlay.Q<Button>("BattleDismissBtn").style.display = DisplayStyle.Flex;
+
+                var em = _ecsWorld.EntityManager;
+                if (em.HasComponent<CargoComponent>(_battleConvoyEntity))
+                {
+                    var cargo = em.GetComponentData<CargoComponent>(_battleConvoyEntity);
+                    cargo.Blob.Dispose();
+                    em.SetComponentData(_battleConvoyEntity, new CargoComponent { Blob = default });
+                }
+            }
         }
 
-        private void UpdateHUD()
+        private void DismissFirstConvoyBattle()
         {
-            if (_goldLabel != null)
-                _goldLabel.text = $"Gold: {_playerProgress.Gold}";
-            if (_mercLabel != null)
-                _mercLabel.text = $"Mercs: {_playerProgress.MercenaryCount}";
-            if (_convoyLabel != null)
-                _convoyLabel.text = $"Convoys: {_convoyCount}";
+            _battleOverlay.style.display = DisplayStyle.None;
+
+            var em = _ecsWorld.EntityManager;
+            if (em.HasComponent<ConvoyStateComponent>(_battleConvoyEntity))
+            {
+                em.SetComponentData(_battleConvoyEntity, new ConvoyStateComponent { State = ConvoyState.Traveling, Progress = 0f });
+            }
+
+            SetECSPaused(false);
+            _battleConvoyEntity = default;
+        }
+
+        private void CreateBattleOverlay(VisualElement root)
+        {
+            _battleOverlay = new VisualElement();
+            _battleOverlay.style.position = Position.Absolute;
+            _battleOverlay.style.top = 0;
+            _battleOverlay.style.left = 0;
+            _battleOverlay.style.right = 0;
+            _battleOverlay.style.bottom = 0;
+            _battleOverlay.style.backgroundColor = new Color(0, 0, 0, 0.7f);
+            _battleOverlay.style.alignItems = Align.Center;
+            _battleOverlay.style.justifyContent = Justify.Center;
+            _battleOverlay.style.display = DisplayStyle.None;
+
+            var panel = new VisualElement();
+            panel.style.backgroundColor = new Color(0.15f, 0.12f, 0.1f, 0.95f);
+            panel.style.borderTopWidth = 2;
+            panel.style.borderBottomWidth = 2;
+            panel.style.borderLeftWidth = 2;
+            panel.style.borderRightWidth = 2;
+            panel.style.paddingLeft = 24;
+            panel.style.paddingRight = 24;
+            panel.style.paddingTop = 20;
+            panel.style.paddingBottom = 20;
+            panel.style.width = 420;
+
+            var title = new Label("Ambush!");
+            title.name = "BattleTitleLabel";
+            title.style.color = new Color(0.9f, 0.3f, 0.2f);
+            title.style.fontSize = 22;
+            title.style.unityFontStyleAndWeight = FontStyle.Bold;
+            title.style.unityTextAlign = TextAnchor.MiddleCenter;
+            title.style.marginBottom = 12;
+            panel.Add(title);
+
+            var desc = new Label("Bandits attack your first convoy!");
+            desc.style.color = Color.white;
+            desc.style.fontSize = 14;
+            desc.style.unityTextAlign = TextAnchor.MiddleCenter;
+            desc.style.marginBottom = 16;
+            panel.Add(desc);
+
+            var forcesRow = new VisualElement();
+            forcesRow.style.flexDirection = FlexDirection.Row;
+            forcesRow.style.justifyContent = Justify.Center;
+            forcesRow.style.marginBottom = 16;
+
+            var playerForce = new Label("Your forces: Mercenaries x" + _mercManager.MercenaryCount);
+            playerForce.name = "BattlePlayerForceLabel";
+            playerForce.style.color = new Color(0.3f, 0.8f, 0.3f);
+            playerForce.style.fontSize = 14;
+            playerForce.style.marginRight = 20;
+            forcesRow.Add(playerForce);
+
+            var enemyForce = new Label("Enemy: Bandits x5");
+            enemyForce.style.color = new Color(0.9f, 0.3f, 0.2f);
+            enemyForce.style.fontSize = 14;
+            forcesRow.Add(enemyForce);
+
+            panel.Add(forcesRow);
+
+            var resultLabel = new Label("");
+            resultLabel.name = "BattleResultLabel";
+            resultLabel.style.color = new Color(0.8f, 0.7f, 0.3f);
+            resultLabel.style.fontSize = 16;
+            resultLabel.style.unityTextAlign = TextAnchor.MiddleCenter;
+            resultLabel.style.marginBottom = 16;
+            resultLabel.style.whiteSpace = WhiteSpace.Normal;
+            panel.Add(resultLabel);
+
+            var buttonRow = new VisualElement();
+            buttonRow.style.flexDirection = FlexDirection.Row;
+            buttonRow.style.justifyContent = Justify.Center;
+
+            var engageBtn = new Button(ResolveFirstConvoyBattle);
+            engageBtn.name = "BattleEngageBtn";
+            engageBtn.text = "Engage!";
+            engageBtn.style.width = 140;
+            engageBtn.style.height = 36;
+            engageBtn.style.backgroundColor = new Color(0.4f, 0.25f, 0.05f);
+            engageBtn.style.color = Color.white;
+            engageBtn.style.fontSize = 15;
+            engageBtn.style.unityFontStyleAndWeight = FontStyle.Bold;
+            buttonRow.Add(engageBtn);
+
+            var dismissBtn = new Button(DismissFirstConvoyBattle);
+            dismissBtn.name = "BattleDismissBtn";
+            dismissBtn.text = "Continue";
+            dismissBtn.style.width = 140;
+            dismissBtn.style.height = 36;
+            dismissBtn.style.backgroundColor = new Color(0.2f, 0.4f, 0.2f);
+            dismissBtn.style.color = Color.white;
+            dismissBtn.style.fontSize = 15;
+            dismissBtn.style.display = DisplayStyle.None;
+            buttonRow.Add(dismissBtn);
+
+            panel.Add(buttonRow);
+            _battleOverlay.Add(panel);
+            root.Add(_battleOverlay);
         }
 
         private void OnConvoyArrived(ConvoyArrivedEvent evt)
@@ -273,19 +475,19 @@ namespace ConvoyManager.Core
             if (cargo.Blob.IsCreated)
             {
                 ref var cargoBlob = ref cargo.Blob.Value;
-                float totalEarned = 0;
+                string itemSummary = "";
                 for (int i = 0; i < cargoBlob.Items.Length; i++)
                 {
                     var item = cargoBlob.Items[i];
-                    var itemSO = _economyEngine.AllItems.FirstOrDefault(it => it.ID == item.ItemId);
-                    if (itemSO == null) continue;
-                    float sellPrice = _economyEngine.GetPrice(itemSO, arrivalCity) * 0.8f;
-                    float earned = sellPrice * item.Quantity;
-                    _playerProgress.AddGold((int)earned);
-                    _economyEngine.ApplyTransaction(itemSO, arrivalCity, item.Quantity, false);
-                    totalEarned += earned;
+                    arrivalCity.AddToPlayerCache(item.ItemId, item.Quantity);
+                    string itemName = "Item#" + item.ItemId;
+                    var itemDef = _economyEngine.AllItems.FirstOrDefault(d => d.ID == item.ItemId);
+                    if (itemDef != null) itemName = itemDef.Name;
+                    if (i > 0) itemSummary += ", ";
+                    itemSummary += itemName + " x" + item.Quantity;
                 }
-                Debug.Log($"[Convoy] Arrived at {arrivalCity.Name}, sold cargo for {totalEarned:F0} gold");
+                string toastMsg = $"Convoy arrived at {arrivalCity.Name}\nReceived: {itemSummary}";
+                ShowToast(toastMsg);
                 cargo.Blob.Dispose();
                 em.SetComponentData(evt.ConvoyEntity, new CargoComponent { Blob = default });
                 UpdateHUD();
@@ -310,10 +512,10 @@ namespace ConvoyManager.Core
             }
             else
             {
-                em.SetComponentData(evt.ConvoyEntity, new ConvoyStateComponent { State = ConvoyState.WaitingForInput, Progress = 0f });
                 _convoyCount = System.Math.Max(0, _convoyCount - 1);
                 UpdateHUD();
                 Debug.Log($"[Convoy] Route complete at {arrivalCity.Name}");
+                _cleanupSystem?.PendingDestroy.Enqueue(evt.ConvoyEntity);
             }
         }
 
@@ -352,26 +554,54 @@ namespace ConvoyManager.Core
             _mercLabel.style.height = 30;
             _toolbar.Add(_mercLabel);
 
+            var hireBtn = new Button(() =>
+            {
+                if (_mercManager.Hire())
+                    UpdateHUD();
+            });
+            hireBtn.text = "Hire";
+            hireBtn.style.width = 60;
+            hireBtn.style.height = 30;
+            hireBtn.style.marginLeft = 3;
+            hireBtn.style.backgroundColor = new Color(0.2f, 0.4f, 0.2f);
+            hireBtn.style.color = Color.white;
+            hireBtn.style.fontSize = 11;
+            _toolbar.Add(hireBtn);
+
+            var fireBtn = new Button(() =>
+            {
+                if (_mercManager.Fire())
+                    UpdateHUD();
+            });
+            fireBtn.text = "Fire";
+            fireBtn.style.width = 60;
+            fireBtn.style.height = 30;
+            fireBtn.style.marginLeft = 3;
+            fireBtn.style.backgroundColor = new Color(0.4f, 0.2f, 0.2f);
+            fireBtn.style.color = Color.white;
+            fireBtn.style.fontSize = 11;
+            _toolbar.Add(fireBtn);
+
             _convoyLabel = new Label($"Convoys: {_convoyCount}");
             _convoyLabel.style.width = 100;
             _convoyLabel.style.color = Color.white;
             _convoyLabel.style.height = 30;
             _toolbar.Add(_convoyLabel);
 
-            var marketBtn = new Button(() => { HideAllOverlays(); _marketScreen.Show(); });
+            var marketBtn = new Button(() => { HideAllOverlays(); _marketScreen.Show(); SetMapInteraction(false); });
             marketBtn.text = "Market";
             marketBtn.style.width = 80;
             marketBtn.style.height = 30;
             _toolbar.Add(marketBtn);
 
-            var routeBtn = new Button(() => { HideAllOverlays(); _routePlannerScreen.Show(); });
+            var routeBtn = new Button(() => { HideAllOverlays(); _routePlannerScreen.Show(); SetMapInteraction(false); });
             routeBtn.text = "Route";
             routeBtn.style.width = 80;
             routeBtn.style.height = 30;
             routeBtn.style.marginLeft = 5;
             _toolbar.Add(routeBtn);
 
-            var captainBtn = new Button(() => { HideAllOverlays(); _captainHireScreen.Show(); });
+            var captainBtn = new Button(() => { HideAllOverlays(); _captainHireScreen.Show(); SetMapInteraction(false); });
             captainBtn.text = "Captains";
             captainBtn.style.width = 80;
             captainBtn.style.height = 30;
@@ -392,17 +622,109 @@ namespace ConvoyManager.Core
             menuBtn.style.marginLeft = 5;
             _toolbar.Add(menuBtn);
 
+            var legendBtn = new Button(() => ToggleLegend());
+            legendBtn.text = "Legend";
+            legendBtn.style.width = 80;
+            legendBtn.style.height = 30;
+            legendBtn.style.marginLeft = 5;
+            _toolbar.Add(legendBtn);
+
             root.Add(_toolbar);
+            CreateLegendPanel(root);
+            CreateToast(root);
+            CreateBattleOverlay(root);
         }
 
-        private void StartNewGame()
+        private void CreateLegendPanel(VisualElement root)
         {
-            int seed = Random.Range(0, int.MaxValue);
-            _worldState.Generate(seed);
-            _economyEngine.Initialize(_worldState);
-            _economicEventManager.Start();
-            _captainCollection.Clear();
-            _eventBus.Publish(new GameStartedEvent());
+            _legendPanel = new VisualElement();
+            _legendPanel.style.position = Position.Absolute;
+            _legendPanel.style.top = 45;
+            _legendPanel.style.right = 5;
+            _legendPanel.style.backgroundColor = new Color(0, 0, 0, 0.75f);
+            _legendPanel.style.paddingLeft = 8;
+            _legendPanel.style.paddingRight = 8;
+            _legendPanel.style.paddingTop = 8;
+            _legendPanel.style.paddingBottom = 8;
+            _legendPanel.style.display = DisplayStyle.None;
+
+            AddLegendEntry(_legendPanel, new Color(0.3f, 0.6f, 0.3f), "Plains");
+            AddLegendEntry(_legendPanel, new Color(0.1f, 0.4f, 0.1f), "Forest");
+            AddLegendEntry(_legendPanel, new Color(0.4f, 0.35f, 0.25f), "Mountains");
+            AddLegendEntry(_legendPanel, new Color(0.2f, 0.4f, 0.6f), "Water (impassable)");
+            AddLegendEntry(_legendPanel, new Color(0.83f, 0.63f, 0.09f), "City");
+            AddLegendEntry(_legendPanel, new Color(0.36f, 0.71f, 0.75f), "Village");
+
+            root.Add(_legendPanel);
+        }
+
+        private static void AddLegendEntry(VisualElement parent, Color color, string label)
+        {
+            var row = new VisualElement();
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.alignItems = Align.Center;
+            row.style.marginBottom = 3;
+
+            var swatch = new VisualElement();
+            swatch.style.width = 14;
+            swatch.style.height = 14;
+            swatch.style.backgroundColor = color;
+            swatch.style.marginRight = 6;
+            row.Add(swatch);
+
+            var text = new Label(label);
+            text.style.color = Color.white;
+            text.style.fontSize = 12;
+            row.Add(text);
+
+            parent.Add(row);
+        }
+
+        private void ToggleLegend()
+        {
+            if (_legendPanel == null) return;
+            bool isVisible = _legendPanel.style.display == DisplayStyle.Flex;
+            _legendPanel.style.display = isVisible ? DisplayStyle.None : DisplayStyle.Flex;
+        }
+
+        private void CreateToast(VisualElement root)
+        {
+            _toastLabel = new Label();
+            _toastLabel.style.position = Position.Absolute;
+            _toastLabel.style.bottom = 40;
+            _toastLabel.style.left = 0;
+            _toastLabel.style.right = 0;
+            _toastLabel.style.unityTextAlign = TextAnchor.MiddleCenter;
+            _toastLabel.style.fontSize = 15;
+            _toastLabel.style.color = Color.white;
+            _toastLabel.style.backgroundColor = new Color(0, 0, 0, 0.8f);
+            _toastLabel.style.paddingTop = 10;
+            _toastLabel.style.paddingBottom = 10;
+            _toastLabel.style.paddingLeft = 16;
+            _toastLabel.style.paddingRight = 16;
+            _toastLabel.style.whiteSpace = WhiteSpace.Normal;
+            _toastLabel.style.display = DisplayStyle.None;
+            root.Add(_toastLabel);
+        }
+
+        private void ShowToast(string message, float duration = 4f)
+        {
+            _toastTimer?.Dispose();
+            _toastLabel.text = message;
+            _toastLabel.style.display = DisplayStyle.Flex;
+            _toastTimer = Observable.Timer(TimeSpan.FromSeconds(duration))
+                .Subscribe(_ =>
+                {
+                    _toastLabel.style.display = DisplayStyle.None;
+                })
+                .AddTo(_disposables);
+        }
+
+        private void UpdateHUD()
+        {
+            if (_goldLabel != null) _goldLabel.text = $"Gold: {_playerProgress.Gold}";
+            if (_mercLabel != null) _mercLabel.text = $"Mercs: {_playerProgress.MercenaryCount}";
+            if (_convoyLabel != null) _convoyLabel.text = $"Convoys: {_convoyCount}";
         }
 
         private void ConfigureECSSystems()
@@ -416,21 +738,26 @@ namespace ConvoyManager.Core
             triggerSystem.EventBus = _eventBus;
             triggerSystem.EventPool = eventPool;
             triggerSystem.Probability = _config.EventProbability;
-            simGroup.AddSystemToUpdateList(triggerSystem);
 
             var publisherSystem = world.GetOrCreateSystemManaged<ConvoyEventPublisherSystem>();
             publisherSystem.EventBus = _eventBus;
-            simGroup.AddSystemToUpdateList(publisherSystem);
 
-            simGroup.AddSystemToUpdateList(world.GetOrCreateSystem<ConvoyMovementSystem>());
-            simGroup.AddSystemToUpdateList(world.GetOrCreateSystem<ConvoyResourceSystem>());
-            simGroup.AddSystemToUpdateList(world.GetOrCreateSystem<EventTimerSystem>());
+            world.GetOrCreateSystem<ConvoyMovementSystem>();
+            world.GetOrCreateSystem<ConvoyResourceSystem>();
+            world.GetOrCreateSystem<EventTimerSystem>();
 
             var visSystem = world.GetOrCreateSystemManaged<ConvoyVisualizationSystem>();
             visSystem.SetWorldState(_worldState);
-            world.GetOrCreateSystemManaged<Unity.Entities.PresentationSystemGroup>().AddSystemToUpdateList(visSystem);
 
-            simGroup.SortSystems();
+            _cleanupSystem = world.GetOrCreateSystemManaged<ConvoyCleanupSystem>();
+        }
+
+        private void SetMapInteraction(bool enabled)
+        {
+            if (_hexClickHandler != null)
+                _hexClickHandler.SetActive(enabled);
+            if (_cameraPan != null)
+                _cameraPan.SetActive(enabled);
         }
 
         private void SetupHexClickHandler()
@@ -441,7 +768,10 @@ namespace ConvoyManager.Core
             if (_hexClickHandler == null)
                 _hexClickHandler = grid.AddComponent<HexClickHandler>();
             _hexClickHandler.Initialize(_worldState, _eventBus);
-            _hexClickHandler.SetActive(true);
+            SetMapInteraction(true);
+
+            if (Camera.main != null)
+                _cameraPan = Camera.main.GetComponent<CameraPan>();
         }
 
         private void ShowMainMenu(bool hasActiveSession = false)
@@ -452,8 +782,7 @@ namespace ConvoyManager.Core
                 _toolbar.RemoveFromHierarchy();
                 _toolbar = null;
             }
-            if (_hexClickHandler != null)
-                _hexClickHandler.SetActive(false);
+            SetMapInteraction(false);
             SetECSPaused(true);
             _gameStarted = false;
             _hasActiveSession = hasActiveSession;
@@ -468,6 +797,7 @@ namespace ConvoyManager.Core
             _saveLoadSelect.Hide();
             _eventResolverUI.Hide();
             _captainHireScreen.Hide();
+            SetMapInteraction(true);
         }
 
         private void SetECSPaused(bool paused)

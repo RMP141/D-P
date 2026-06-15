@@ -10,10 +10,6 @@ using UniRx;
 
 namespace ConvoyManager.World
 {
-    /// <summary>
-    /// �������� �� ������������ �������������� ����� � ������ �����.
-    /// ����������� �� GameObject � Grid � Tilemap.
-    /// </summary>
     public class HexGridGenerator : MonoBehaviour
     {
         [Inject] private IWorldState _worldState;
@@ -31,9 +27,9 @@ namespace ConvoyManager.World
 
         private void ConfigureGrid()
         {
-            _grid.cellLayout = _tileConfig.CellLayout;
-            _grid.cellSwizzle = _tileConfig.CellSwizzle;
-            _grid.cellSize = _tileConfig.CellSize;
+            _grid.cellLayout = GridLayout.CellLayout.Hexagon;
+            _grid.cellSwizzle = GridLayout.CellSwizzle.XYZ;
+            _grid.cellSize = new Vector3(0.865f, 1, 0);
         }
 
         private void Start()
@@ -47,11 +43,15 @@ namespace ConvoyManager.World
 
             if (_worldState == null || _tileConfig == null)
             {
-                Debug.LogError("HexGridGenerator: ����������� �� ��������");
+                Debug.LogError("HexGridGenerator: dependencies not resolved");
                 return;
             }
 
             ConfigureGrid();
+
+            // Attach CameraPan to main camera for edge-scroll
+            if (Camera.main != null && Camera.main.GetComponent<CameraPan>() == null)
+                Camera.main.gameObject.AddComponent<CameraPan>();
 
             if (_worldState.Hexes.Count > 0)
                 DrawAllHexes();
@@ -73,6 +73,32 @@ namespace ConvoyManager.World
             }
         }
 
+        private TileBase GetSettlementTile(Hex hex)
+        {
+            if (hex.CityIndices == null || hex.CityIndices.Count == 0)
+                return null;
+
+            var city = _worldState.GetCity(hex.CityIndices[0]);
+            return city.Type == SettlementType.City ? _tileConfig.CityTile : _tileConfig.VillageTile;
+        }
+
+        private TileBase GetTerrainTile(Hex hex)
+        {
+            // If the hex has a settlement, draw the settlement tile instead
+            var settlementTile = GetSettlementTile(hex);
+            if (settlementTile != null)
+                return settlementTile;
+
+            switch (hex.Terrain)
+            {
+                case HexType.Plains: return _tileConfig.PlainsTile;
+                case HexType.Forest: return _tileConfig.ForestTile;
+                case HexType.Mountains: return _tileConfig.MountainsTile;
+                case HexType.Water: return _tileConfig.WaterTile;
+                default: return _tileConfig.PlainsTile;
+            }
+        }
+
         private void DrawAllHexes()
         {
             if (_tilemap == null || _tileConfig == null)
@@ -81,17 +107,10 @@ namespace ConvoyManager.World
                 return;
             }
 
-            bool hexOk = _tileConfig.HexTile != null;
-            bool fogOk = _tileConfig.FogTile != null;
-            Debug.Log($"[HexGridGenerator] HexTile={( hexOk ? _tileConfig.HexTile.name : "NULL")} FogTile={( fogOk ? _tileConfig.FogTile.name : "NULL")}");
-
-            if (!hexOk || !fogOk)
+            if (_tileConfig.FogTile == null)
             {
-                var missingTiles = Resources.LoadAll<TileBase>("Tiles");
-                if (!hexOk && missingTiles.Length > 0) _tileConfig.HexTile = missingTiles[0];
-                if (!fogOk && missingTiles.Length > 1) _tileConfig.FogTile = missingTiles[1];
-                hexOk = _tileConfig.HexTile != null;
-                fogOk = _tileConfig.FogTile != null;
+                var loaded = Resources.LoadAll<TileBase>("Tiles");
+                if (loaded.Length > 0) _tileConfig.FogTile = loaded[0];
             }
 
             var hexes = _worldState.Hexes;
@@ -99,54 +118,65 @@ namespace ConvoyManager.World
             var tiles = new TileBase[hexes.Count];
             for (int i = 0; i < hexes.Count; i++)
             {
-                positions[i] = HexCoordinatesToCell(hexes[i].Coordinates);
-                tiles[i] = hexes[i].IsDiscovered ? _tileConfig.HexTile : _tileConfig.FogTile;
+                var hex = hexes[i];
+                var cellPos = new Vector3Int(hex.Coordinates.x, hex.Coordinates.y, 0);
+                positions[i] = cellPos;
+
+                if (hex.IsDiscovered)
+                    tiles[i] = GetTerrainTile(hex);
+                else
+                    tiles[i] = _tileConfig.FogTile;
+
+                hex.WorldPosition = _tilemap.GetCellCenterWorld(cellPos);
             }
             _tilemap.SetTiles(positions, tiles);
             _tilemap.RefreshAllTiles();
 
+            CenterCameraOnGrid();
+
             int discoveredCount = hexes.Count(h => h.IsDiscovered);
-            int usedCount = _tilemap.GetUsedTilesCount();
-            Debug.Log($"[HexGridGenerator] DrawAllHexes: {discoveredCount}/{hexes.Count} discovered | tiles set: {usedCount}");
+            Debug.Log($"[HexGridGenerator] {discoveredCount}/{hexes.Count} discovered, {hexes.Count} tiles set");
         }
 
-        public void SetMissingTiles()
+        private void CenterCameraOnGrid()
         {
-            if (_tilemap == null || _tileConfig == null) return;
+            var camera = Camera.main;
+            if (camera == null) return;
+
             var hexes = _worldState.Hexes;
-            for (int i = 0; i < hexes.Count; i++)
+            if (hexes.Count == 0) return;
+
+            float maxX = float.MinValue, maxY = float.MinValue;
+            float minX = float.MaxValue, minY = float.MaxValue;
+            foreach (var h in hexes)
             {
-                var hex = hexes[i];
-                Vector3Int cellPos = HexCoordinatesToCell(hex.Coordinates);
-                var existing = _tilemap.GetTile(cellPos);
-                if (existing == null)
-                {
-                    TileBase tile = hex.IsDiscovered ? _tileConfig.HexTile : _tileConfig.FogTile;
-                    if (tile != null)
-                        _tilemap.SetTile(cellPos, tile);
-                }
+                var wp = h.WorldPosition;
+                if (wp.x < minX) minX = wp.x;
+                if (wp.x > maxX) maxX = wp.x;
+                if (wp.y < minY) minY = wp.y;
+                if (wp.y > maxY) maxY = wp.y;
             }
-            _tilemap.RefreshAllTiles();
+
+            float centerX = (minX + maxX) * 0.5f;
+            float centerY = (minY + maxY) * 0.5f;
+            float gridWidth = maxX - minX + _tileConfig.CellSize.x;
+            float gridHeight = maxY - minY + _tileConfig.CellSize.y;
+
+            camera.transform.position = new Vector3(centerX, centerY, -10);
+            camera.orthographicSize = math.max(gridWidth * 0.5f, gridHeight * 0.5f) * 1.15f;
         }
 
         private void OnHexDiscovered(HexDiscoveredEvent evt)
         {
             var hex = _worldState.GetHex(evt.HexIndex);
-            Vector3Int cellPos = HexCoordinatesToCell(hex.Coordinates);
-            _tilemap.SetTile(cellPos, _tileConfig.HexTile);
+            var cellPos = new Vector3Int(hex.Coordinates.x, hex.Coordinates.y, 0);
+            _tilemap.SetTile(cellPos, GetTerrainTile(hex));
         }
 
-        /// <summary>
-        /// ����������� ���������� ����� (X,Y) � ������ Tilemap (pointy-top, odd-row offset).
-        /// </summary>
-        private Vector3Int HexCoordinatesToCell(int2 coords)
-        {
-            return new Vector3Int(coords.x, coords.y, 0);
-        }
+        public IWorldState GetWorldState() => _worldState;
 
         private void OnDestroy()
         {
-            // ������� �������� ��� ����������� �������
         }
     }
 }

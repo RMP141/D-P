@@ -98,7 +98,16 @@ namespace ConvoyManager.UI
                 _cityDropdowns[1].value = cityNames[^1];
             }
 
+            if (_cityDropdowns.Count > 0)
+                _cityDropdowns[0].RegisterValueChangedCallback(_ => RefreshCargo());
+
             RefreshCargo();
+        }
+
+        private City GetDepartureCity()
+        {
+            string depName = _cityDropdowns.Count > 0 ? _cityDropdowns[0].value : null;
+            return _worldState.Cities.FirstOrDefault(c => c.Name == depName);
         }
 
         private void RefreshCargo()
@@ -107,7 +116,10 @@ namespace ConvoyManager.UI
             _cargoRows.Clear();
             _cargoQtyFields.Clear();
 
-            foreach (var kvp in _playerProgress.Inventory)
+            var depCity = GetDepartureCity();
+            if (depCity == null) return;
+
+            foreach (var kvp in depCity.PlayerCache)
             {
                 if (kvp.Value <= 0) continue;
                 var item = _economyEngine.AllItems.FirstOrDefault(i => i.ID == kvp.Key);
@@ -145,7 +157,8 @@ namespace ConvoyManager.UI
         {
             var names = new List<string>();
             foreach (var city in _worldState.Cities)
-                names.Add(city.Name);
+                if (_worldState.GetHex(city.HexIndex).IsDiscovered)
+                    names.Add(city.Name);
             return names;
         }
 
@@ -170,26 +183,33 @@ namespace ConvoyManager.UI
                 return;
             }
 
+            var depCity = GetDepartureCity();
             var cargoItems = new List<CargoItem>();
             foreach (var kvp in _cargoQtyFields)
             {
                 int qty = kvp.Value.value;
-                if (qty > 0)
+                if (qty > 0 && depCity != null)
                 {
-                    int available = _playerProgress.Inventory.ContainsKey(kvp.Key) ? _playerProgress.Inventory[kvp.Key] : 0;
+                    depCity.PlayerCache.TryGetValue(kvp.Key, out int available);
                     int loadQty = Mathf.Min(qty, available);
                     if (loadQty > 0)
                     {
                         cargoItems.Add(new CargoItem { ItemId = kvp.Key, Quantity = loadQty });
-                        _playerProgress.RemoveItem(kvp.Key, loadQty);
+                        depCity.RemoveFromPlayerCache(kvp.Key, loadQty);
                     }
                 }
             }
 
-            var entity = _routePlanner.CreateConvoy(selectedIndices.ToArray(), cargoItems.ToArray());
-            _eventBus.Publish(new ConvoyCreatedEvent(entity));
-
-            Hide();
+            try
+            {
+                var entity = _routePlanner.CreateConvoy(selectedIndices.ToArray(), cargoItems.ToArray());
+                _eventBus.Publish(new ConvoyCreatedEvent(entity));
+                Hide();
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogError($"[RoutePlanner] Cannot create convoy: {ex.Message}");
+            }
         }
     }
 }

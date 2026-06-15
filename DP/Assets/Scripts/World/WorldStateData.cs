@@ -1,11 +1,9 @@
 using System.Collections.Generic;
+using System.Linq;
 using Unity.Mathematics;
 
 namespace ConvoyManager.World
 {
-    /// <summary>
-    /// Контейнер для сериализации WorldState.
-    /// </summary>
     [System.Serializable]
     public class WorldStateData
     {
@@ -24,7 +22,9 @@ namespace ConvoyManager.World
                 data.Hexes[i] = new HexData
                 {
                     Coordinates = hexes[i].Coordinates,
+                    Terrain = hexes[i].Terrain,
                     IsDiscovered = hexes[i].IsDiscovered,
+                    WorldPosition = hexes[i].WorldPosition,
                     CityIndices = hexes[i].CityIndices.ToArray()
                 };
             }
@@ -32,12 +32,20 @@ namespace ConvoyManager.World
             data.Cities = new CityData[cities.Count];
             for (int i = 0; i < cities.Count; i++)
             {
+                var city = cities[i];
                 data.Cities[i] = new CityData
                 {
-                    Index = cities[i].Index,
-                    HexIndex = cities[i].HexIndex,
-                    Faction = cities[i].Faction,
-                    Name = cities[i].Name
+                    Index = city.Index,
+                    HexIndex = city.HexIndex,
+                    Faction = city.Faction,
+                    Name = city.Name,
+                    Type = city.Type,
+                    MaxWeight = city.MaxWeight,
+                    AvailableItemIds = city.AvailableItemIds.ToArray(),
+                    StockKeys = city.Stock.Keys.ToArray(),
+                    StockValues = city.Stock.Values.ToArray(),
+                    CacheKeys = city.PlayerCache.Keys.ToArray(),
+                    CacheValues = city.PlayerCache.Values.ToArray()
                 };
             }
 
@@ -49,7 +57,9 @@ namespace ConvoyManager.World
     public struct HexData
     {
         public int2 Coordinates;
+        public HexType Terrain;
         public bool IsDiscovered;
+        public float3 WorldPosition;
         public int[] CityIndices;
     }
 
@@ -60,5 +70,12 @@ namespace ConvoyManager.World
         public int HexIndex;
         public Faction Faction;
         public string Name;
+        public SettlementType Type;
+        public float MaxWeight;
+        public int[] AvailableItemIds;
+        public int[] StockKeys;
+        public int[] StockValues;
+        public int[] CacheKeys;
+        public int[] CacheValues;
     }
 }

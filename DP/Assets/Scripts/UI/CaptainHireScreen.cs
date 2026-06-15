@@ -105,7 +105,8 @@ namespace ConvoyManager.UI
                 nameLabel.style.unityFontStyleAndWeight = isActive ? FontStyle.Bold : FontStyle.Normal;
                 row.Add(nameLabel);
 
-                var statsLabel = new Label($"ATK: {captain.AttackBonus} DEF: {captain.DefenseBonus}");
+                string speedText = isActive ? " SPD:+5" : "";
+                var statsLabel = new Label($"ATK:{captain.AttackBonus} DEF:{captain.DefenseBonus}{speedText}");
                 statsLabel.style.width = 150;
                 statsLabel.style.color = Color.gray;
                 row.Add(statsLabel);

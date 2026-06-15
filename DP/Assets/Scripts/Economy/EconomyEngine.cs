@@ -206,6 +206,44 @@ namespace ConvoyManager.Economy
 
         public Dictionary<int, float> GetAllModifiers() => new Dictionary<int, float>(_dynamicModifiers);
 
+        public bool IsItemAvailableAtCity(int itemId, City city)
+        {
+            return city.AvailableItemIds.Contains(itemId);
+        }
+
+        public int GetCityStock(int itemId, City city)
+        {
+            return city.Stock.TryGetValue(itemId, out int qty) ? qty : 0;
+        }
+
+        public bool CanBuyFromCity(ItemDataSO item, City city, int quantity)
+        {
+            if (!IsItemAvailableAtCity(item.ID, city)) return false;
+            int stock = GetCityStock(item.ID, city);
+            if (stock < quantity) return false;
+            return true;
+        }
+
+        public bool CanSellToCity(ItemDataSO item, City city, int quantity)
+        {
+            float itemWeight = item.Weight * quantity;
+            float currentWeight = 0f;
+            foreach (var kvp in city.Stock)
+            {
+                var i = AllItems.FirstOrDefault(x => x.ID == kvp.Key);
+                if (i != null) currentWeight += i.Weight * kvp.Value;
+            }
+            return currentWeight + itemWeight <= city.MaxWeight;
+        }
+
+        public void ModifyCityStock(City city, int itemId, int delta)
+        {
+            if (delta == 0) return;
+            if (!city.Stock.ContainsKey(itemId) && delta > 0)
+                city.Stock[itemId] = 0;
+            city.Stock[itemId] = System.Math.Max(0, city.Stock[itemId] + delta);
+        }
+
         public void SetAllModifiers(Dictionary<int, float> modifiers)
         {
             _dynamicModifiers = new Dictionary<int, float>(modifiers);

@@ -37,33 +37,42 @@ namespace ConvoyManager.Rendering
             if (_worldState == null) return;
 
             using var entities = _convoyQuery.ToEntityArray(Allocator.Temp);
-            int count = entities.Length;
+            // Count only traveling convoys
+            int count = 0;
+            for (int i = 0; i < entities.Length; i++)
+            {
+                var state = EntityManager.GetComponentData<ConvoyStateComponent>(entities[i]);
+                if (state.State == ConvoyState.Traveling) count++;
+            }
+
             if (count != _visuals.Length)
                 ResizeVisuals(count);
 
-            for (int i = 0; i < count; i++)
+            int visIdx = 0;
+            for (int i = 0; i < entities.Length; i++)
             {
-                var pos = CalculatePosition(entities[i]);
-                _visuals[i].transform.position = new Vector3(pos.x, pos.y, 0);
+                var state = EntityManager.GetComponentData<ConvoyStateComponent>(entities[i]);
+                if (state.State != ConvoyState.Traveling) continue;
+
+                var pos = CalculatePosition(entities[i], state);
+                _visuals[visIdx].transform.position = new Vector3(pos.x, pos.y, 0);
+                visIdx++;
             }
         }
 
-        private float3 CalculatePosition(Entity entity)
+        private float3 CalculatePosition(Entity entity, ConvoyStateComponent state)
         {
-            var state = EntityManager.GetComponentData<ConvoyStateComponent>(entity);
             var route = EntityManager.GetComponentData<RouteComponent>(entity);
             ref var routeBlob = ref route.Blob.Value;
 
-            int cityA = routeBlob.CityIndices[0];
-            int cityB = routeBlob.CityIndices[1];
+            int seg = routeBlob.CurrentSegment;
+            int cityA = routeBlob.CityIndices[seg];
+            int cityB = routeBlob.CityIndices[seg + 1];
 
             var hexA = _worldState.GetHex(_worldState.GetCity(cityA).HexIndex);
             var hexB = _worldState.GetHex(_worldState.GetCity(cityB).HexIndex);
 
-            float3 aPos = new float3(hexA.Coordinates.x + 0.5f, hexA.Coordinates.y + 0.5f, 0);
-            float3 bPos = new float3(hexB.Coordinates.x + 0.5f, hexB.Coordinates.y + 0.5f, 0);
-
-            return math.lerp(aPos, bPos, state.Progress);
+            return math.lerp(hexA.WorldPosition, hexB.WorldPosition, state.Progress);
         }
 
         private void ResizeVisuals(int count)

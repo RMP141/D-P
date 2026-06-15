@@ -12,8 +12,17 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e0c6df0f340848144aa0af87e7da498b, type: 3}
   m_Name: HexTileConfig
   m_EditorClassIdentifier: Assembly-CSharp::ConvoyManager.Data.HexTileConfig
-  HexTile: {fileID: 11400000, guid: 8ce70ba640125a745bb8b12c1861a3b4, type: 2}
+  PlainsTile: {fileID: 11400000, guid: 8750e5288df0bb140bfc290ba1f29ce7, type: 2}
+  ForestTile: {fileID: 11400000, guid: 96570f51d4b09ec4588698966300d5fc, type: 2}
+  MountainsTile: {fileID: 11400000, guid: 1b23d095c459d9641b2cd621e7a9b62a, type: 2}
+  WaterTile: {fileID: 11400000, guid: 455fdac9cf1791a4aad0151bb846c481, type: 2}
   FogTile: {fileID: 11400000, guid: a92ca5b3eaf77a94d998f47c333d5c71, type: 2}
+  CityTile: {fileID: 11400000, guid: a55e067568734184897acc655737345b, type: 2}
+  VillageTile: {fileID: 11400000, guid: 84d858da0fb12904b8d5b9d8331017d0, type: 2}
   CellLayout: 0
   CellSwizzle: 0
   CellSize: {x: 1, y: 1, z: 0}
+  NoiseScale: 0.08
+  WaterThreshold: -0.15
+  ForestThreshold: 0.15
+  MountainThreshold: 0.4

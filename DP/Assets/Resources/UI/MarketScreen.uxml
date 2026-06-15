@@ -1,10 +1,10 @@
 <ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements">
-  <ui:VisualElement style="flex-grow: 1; padding: 10px; background-color: rgba(0, 0, 0, 0.85);">
-    <ui:VisualElement style="flex-direction: row; justify-content: space-between;">
-      <ui:Label name="weight-label" text="Weight: 0 / 0" style="font-size: 14px; color: white; -unity-font-style: bold;" />
-      <ui:Button name="close-button" text="X" style="width: 30px;" />
+  <ui:VisualElement style="flex-grow: 1; padding: 12px; background-color: rgba(30, 28, 24, 0.92); border-left-color: rgb(180, 140, 60); border-left-width: 3px;">
+    <ui:VisualElement style="flex-direction: row; justify-content: space-between; margin-bottom: 6px;">
+      <ui:Label name="weight-label" text="Weight: 0 / 0" style="font-size: 14px; color: rgb(220, 210, 190); -unity-font-style: bold;" />
+      <ui:Button name="close-button" text="X" style="width: 28px; height: 22px; font-size: 13px; background-color: rgba(60, 40, 40, 0.8); color: rgb(200, 160, 160);" />
     </ui:VisualElement>
-    <ui:DropdownField name="city-dropdown" label="City: " style="width: 250px; margin-top: 5px;" />
-    <ui:ListView name="items-list" selection-type="None" show-foldout-header="false" fixed-item-height="60" style="flex-grow: 1; margin-top: 10px;" />
+    <ui:DropdownField name="city-dropdown" label="City: " style="width: 300px; margin-top: 4px; color: rgb(220, 210, 190);" />
+    <ui:ListView name="items-list" selection-type="None" show-foldout-header="false" fixed-item-height="60" style="flex-grow: 1; margin-top: 8px;" />
   </ui:VisualElement>
 </ui:UXML>

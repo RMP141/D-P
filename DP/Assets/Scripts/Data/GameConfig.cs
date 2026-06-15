@@ -30,6 +30,17 @@ namespace ConvoyManager.Data
         public float EventCheckInterval = 60f;
         [Range(0f, 1f)] public float EventProbability = 0.3f;
 
+        [Header("City Names")]
+        public string[] CityNames = new string[]
+        {
+            "Valdoria", "Lunara", "Durnhold", "Aerilon", "Cinderwall",
+            "Frostmire", "Thornmark", "Gladestone", "Wyrmcross", "Silverholt",
+            "Ashford", "Briarwood", "Copperharbor", "Dawnshire", "Emberfeld",
+            "Fernwatch", "Goldspire", "Havenbrooke", "Ironforge", "Jadeport",
+            "Kingshelm", "Lakeview", "Mistvale", "Northgate", "Oakenshire",
+            "Portbridge", "Redmarch", "Stormfell", "Thornwall", "Whitehollow"
+        };
+
         [Header("ECS Convoy")]
         public float FoodConsumptionPerSec = 0.5f;
         public float WearRatePerSec = 0.1f;
